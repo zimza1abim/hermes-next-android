@@ -24,7 +24,10 @@ import java.io.File
  */
 class ChatActivity : ComponentActivity() {
     private val controller by lazy { AssistantController.obtainChats(this) }
-    private val inChat = mutableStateOf(false)
+    private val pane = mutableStateOf(Pane.LIST)
+    private val admin by lazy { HermesAdmin(this) }
+    private val fonts = kotlinx.coroutines.flow.MutableStateFlow(Listing<FontChoice>())
+    private val nativeHome = mutableStateOf(true)
     private val tab = mutableStateOf<String?>(null)
     private var captureUri: Uri? = null
     private val pickPhotos = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris ->
@@ -41,8 +44,10 @@ class ChatActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        HermesFonts.preload(applicationContext)
         captureUri = savedInstanceState?.getString(STATE_CAPTURE)?.let(Uri::parse)
-        inChat.value = savedInstanceState?.getBoolean(STATE_IN_CHAT) ?: false
+        pane.value = savedInstanceState?.getString(STATE_PANE)?.let { name -> Pane.entries.firstOrNull { it.name == name } } ?: Pane.LIST
+        nativeHome.value = NativeHome.enabled(this)
         tab.value = savedInstanceState?.getString(STATE_TAB)
         controller.loadAvatars()
         setContent {
@@ -57,6 +62,12 @@ class ChatActivity : ComponentActivity() {
             val chats by controller.chats.collectAsState()
             val loading by controller.chatsLoading.collectAsState()
             val avatars by controller.avatars.collectAsState()
+            val fontList by fonts.collectAsState()
+            val cron by admin.cron.collectAsState()
+            val skills by admin.skills.collectAsState()
+            val toolsets by admin.toolsets.collectAsState()
+            val mcp by admin.mcp.collectAsState()
+            val notice by admin.notice.collectAsState()
             ChatScreen(
                 state = state,
                 draft = draft,
@@ -65,8 +76,11 @@ class ChatActivity : ComponentActivity() {
                 preparing = preparing,
                 models = ModelChoice(favourites, setup, catalog),
                 actions = actions,
-                view = ChatsView(chats, loading, avatars, controller::avatarKey, tab.value, inChat.value),
+                view = ChatsView(chats, loading, avatars, controller::avatarKey, tab.value, pane.value),
                 chats = chatsActions,
+                menu = MenuView(fontList, cron, skills, toolsets, mcp, notice, nativeHome.value,
+                    capabilitiesOf = tab.value?.let { name -> state.profiles.firstOrNull { it.name == name }?.title ?: name } ?: "일반 프로필"),
+                menuActions = menuActions,
             )
         }
     }
@@ -76,23 +90,63 @@ class ChatActivity : ComponentActivity() {
             onOpen = { row ->
                 // A running turn keeps its chat; the picked one opens only when nothing runs.
                 controller.openChat(row)
-                inChat.value = true
+                pane.value = Pane.CHAT
             },
             onNew = {
                 controller.selectProfile(tab.value)
-                inChat.value = true
+                pane.value = Pane.CHAT
             },
             onTab = { tab.value = it },
             onBackToList = {
-                inChat.value = false
+                pane.value = Pane.LIST
                 controller.refreshChats()
             },
             onRefresh = {
                 controller.refreshChats()
                 controller.refreshProfiles()
             },
+            onMenu = { pane.value = Pane.MENU },
             onExit = ::finish,
         )
+    }
+
+    private val menuActions by lazy {
+        MenuActions(
+            onPane = { next ->
+                pane.value = next
+                load(next)
+            },
+            onPickFont = { choice -> Thread { HermesFonts.pick(applicationContext, choice) }.start() },
+            onCronPaused = admin::setCronPaused,
+            onCronRun = admin::runCron,
+            onRefresh = ::load,
+            onAppSettings = {
+                startActivity(com.hermeswebui.android.launcher.AppShortcuts.settingsIntent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },
+            onWebapp = ::openApp,
+            onNativeHome = { on ->
+                NativeHome.set(this, on)
+                nativeHome.value = on
+            },
+            onNoticeShown = { admin.notice.value = null },
+        )
+    }
+
+    /** Reads what [next] shows; each list keeps its last rows while it refreshes. */
+    private fun load(next: Pane) {
+        when (next) {
+            Pane.CRON -> admin.refreshCron()
+            Pane.CAPABILITIES -> admin.refreshCapabilities(tab.value)
+            Pane.FONT -> {
+                fonts.value = fonts.value.copy(loading = true)
+                val app = applicationContext
+                Thread {
+                    val found = HermesFonts.installed(app)
+                    runOnUiThread { fonts.value = Listing(found) }
+                }.start()
+            }
+            else -> Unit
+        }
     }
 
     private val actions by lazy {
@@ -105,7 +159,7 @@ class ChatActivity : ComponentActivity() {
             onSend = ::send,
             onStop = controller::stop,
             onAgain = controller::again,
-            onClose = { inChat.value = false },
+            onClose = { pane.value = Pane.LIST },
             onNewChat = { controller.selectProfile(controller.state.value.profile) },
             onRetry = controller::retry,
             onApprove = controller::approve,
@@ -121,7 +175,7 @@ class ChatActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         captureUri?.let { outState.putString(STATE_CAPTURE, it.toString()) }
-        outState.putBoolean(STATE_IN_CHAT, inChat.value)
+        outState.putString(STATE_PANE, pane.value.name)
         outState.putString(STATE_TAB, tab.value)
     }
 
@@ -168,7 +222,7 @@ class ChatActivity : ComponentActivity() {
 
     private companion object {
         const val STATE_CAPTURE = "capture"
-        const val STATE_IN_CHAT = "in_chat"
+        const val STATE_PANE = "pane"
         const val STATE_TAB = "tab"
     }
 }

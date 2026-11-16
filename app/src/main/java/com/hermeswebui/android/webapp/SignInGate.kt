@@ -7,6 +7,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import okhttp3.Call
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
@@ -88,6 +89,18 @@ internal object SignInGate {
             url(endpoint.api(path)).get().header("Origin", endpoint.origin)
         }) { code, body, _ ->
             if (code !in 200..299) null else runCatching { JSONTokener(body).nextValue() as? JSONObject }.getOrNull()
+        }
+
+    /**
+     * Any server API call: GET, or POST/PUT with [body] (an empty body when null). [done] gets the reply's
+     * JSON value (an object or an array), or null on failure.
+     */
+    fun call(endpoint: MonitorEndpoint, method: String, path: String, body: JSONObject?, cookieUrl: String, done: (Any?) -> Unit): Handle =
+        exchange(cookieUrl, null, done, failed = { null }, target = {
+            val payload = (body?.toString() ?: "").toRequestBody("application/json".toMediaType())
+            url(endpoint.api(path)).method(method, if (method == "GET") null else payload).header("Origin", endpoint.origin)
+        }) { code, text, _ ->
+            if (code !in 200..299) null else runCatching { JSONTokener(text).nextValue() }.getOrNull()?.takeIf { it is JSONObject || it is org.json.JSONArray }
         }
 
     /** One request with the jar's cookie, storing any cookie the reply sets before the next request reads it. */

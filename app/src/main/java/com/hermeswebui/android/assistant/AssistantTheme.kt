@@ -37,13 +37,19 @@ internal object Rose {
     val Disabled = Color(0xFFF3D5E3)
 }
 
+/**
+ * Every text style of the native screens. With a font picked in the app ([HermesFonts]) all of them use
+ * it; without one, chat text uses the phone's own font and the display styles keep their own faces.
+ * Read during composition, so a new pick redraws the text.
+ */
 internal object RoseType {
-    /** Chat text uses the device font, including a font the user picked in system settings. */
-    val Body = TextStyle(fontSize = 16.sp, lineHeight = 26.sp, color = Rose.Text)
-    val Wordmark = TextStyle(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium, fontSize = 22.sp, color = Rose.Text)
-    val Greeting = TextStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 26.sp, lineHeight = 34.sp, color = Rose.Text)
-    val Meta = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 0.6.sp, color = Rose.Muted)
-    val Label = TextStyle(fontSize = 13.sp, color = Rose.Muted)
+    private val picked: FontFamily? get() = HermesFonts.family
+    val Body: TextStyle get() = TextStyle(fontFamily = picked, fontSize = 16.sp, lineHeight = 26.sp, color = Rose.Text)
+    val Wordmark: TextStyle get() = TextStyle(fontFamily = picked ?: FontFamily.Serif, fontStyle = if (picked == null) FontStyle.Italic else FontStyle.Normal,
+        fontWeight = FontWeight.Medium, fontSize = 22.sp, color = Rose.Text)
+    val Greeting: TextStyle get() = TextStyle(fontFamily = picked ?: FontFamily.Serif, fontWeight = FontWeight.Bold, fontSize = 26.sp, lineHeight = 34.sp, color = Rose.Text)
+    val Meta: TextStyle get() = TextStyle(fontFamily = picked ?: FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 0.6.sp, color = Rose.Muted)
+    val Label: TextStyle get() = TextStyle(fontFamily = picked, fontSize = 13.sp, color = Rose.Muted)
 }
 
 private val PETALS = listOf(

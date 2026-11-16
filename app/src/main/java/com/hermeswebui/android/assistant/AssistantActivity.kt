@@ -45,6 +45,7 @@ class AssistantActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        HermesFonts.preload(applicationContext)
         captureUri = savedInstanceState?.getString(STATE_CAPTURE)?.let(Uri::parse)
         // The assistant shortcuts live on the launcher icon; publish them once a process even if the main
         // app never opened. Package-manager and shortcut-service calls stay off the panel's first frame.

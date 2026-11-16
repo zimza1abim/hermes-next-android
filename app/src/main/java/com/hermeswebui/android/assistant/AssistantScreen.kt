@@ -65,6 +65,7 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -161,7 +162,8 @@ internal fun AssistantScreen(
     val calm = remember {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
-    CompositionLocalProvider(LocalCalmMotion provides calm) {
+    // Text drawn without a style of its own (buttons, chips) follows the picked font too.
+    CompositionLocalProvider(LocalCalmMotion provides calm, LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = HermesFonts.family)) {
         Panel(state, draft, mode, photos, preparing, replaceable, models, actions)
     }
 }

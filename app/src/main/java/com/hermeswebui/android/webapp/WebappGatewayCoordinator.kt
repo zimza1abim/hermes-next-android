@@ -656,11 +656,13 @@ class WebappGatewayCoordinator private constructor(
         }
 
         /** Whether a process with no Activity (after boot or an app update) should start monitoring. */
-        fun wantsHeadlessStart(context: Context): Boolean {
+        fun wantsHeadlessStart(context: Context): Boolean =
+            SettingsRepository(context.applicationContext).getWebappBackgroundSettings().keepAlive && isKnownWebapp(context)
+
+        /** Whether the configured server showed a Webapp document before: its gateway can be used without a page. */
+        fun isKnownWebapp(context: Context): Boolean {
             val app = context.applicationContext
-            val repository = SettingsRepository(app)
-            if (!repository.getWebappBackgroundSettings().keepAlive) return false
-            val url = repository.getSettings("", "").serverUrl.takeIf { it.isNotBlank() } ?: return false
+            val url = SettingsRepository(app).getSettings("", "").serverUrl.takeIf { it.isNotBlank() } ?: return false
             val key = MessageDigest.getInstance("SHA-256").digest(url.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
             return app.getSharedPreferences("hermes_monitor_watch", Context.MODE_PRIVATE).getBoolean(KNOWN_PREFIX + key, false)

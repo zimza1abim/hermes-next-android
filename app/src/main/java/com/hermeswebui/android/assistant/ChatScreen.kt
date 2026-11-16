@@ -34,9 +34,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -70,7 +72,7 @@ internal class ChatsView(
     val avatarKey: (String) -> String,
     /** The bot whose chats are listed; null is the general chats of the server's own profile. */
     val tab: String?,
-    val inChat: Boolean,
+    val pane: Pane,
 )
 
 internal class ChatsActions(
@@ -79,6 +81,7 @@ internal class ChatsActions(
     val onTab: (String?) -> Unit,
     val onBackToList: () -> Unit,
     val onRefresh: () -> Unit,
+    val onMenu: () -> Unit,
     val onExit: () -> Unit,
 )
 
@@ -93,6 +96,8 @@ internal fun ChatScreen(
     actions: AssistantActions,
     view: ChatsView,
     chats: ChatsActions,
+    menu: MenuView,
+    menuActions: MenuActions,
 ) {
     val context = LocalContext.current
     val calm = remember {
@@ -102,13 +107,26 @@ internal fun ChatScreen(
     val botRow = state.bot
     val botName = botRow?.title ?: state.profile
     val bot = botName?.let { Bot(it, view.avatars[view.avatarKey(botRow?.name ?: state.profile.orEmpty())]) }
-    CompositionLocalProvider(LocalCalmMotion provides calm, LocalBot provides bot) {
-        BackHandler { if (view.inChat) chats.onBackToList() else chats.onExit() }
+    CompositionLocalProvider(
+        LocalCalmMotion provides calm, LocalBot provides bot,
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = HermesFonts.family),
+    ) {
+        BackHandler {
+            when (view.pane) {
+                Pane.LIST -> chats.onExit()
+                Pane.CHAT -> chats.onBackToList()
+                Pane.MENU -> menuActions.onPane(Pane.LIST)
+                else -> menuActions.onPane(Pane.MENU)
+            }
+        }
         Box(Modifier.fillMaxSize().background(Rose.Panel)) {
             DotGrid(Modifier.fillMaxWidth().height(180.dp))
             Column(Modifier.fillMaxSize().statusBarsPadding().windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))) {
-                if (view.inChat) ChatPane(state, draft, mode, photos, preparing, models, actions, bot, chats.onBackToList, chats.onNew)
-                else ListPane(state, actions, view, chats)
+                when (view.pane) {
+                    Pane.CHAT -> ChatPane(state, draft, mode, photos, preparing, models, actions, bot, chats.onBackToList, chats.onNew)
+                    Pane.LIST -> ListPane(state, actions, view, chats)
+                    else -> MenuPanes(view.pane, menu, menuActions)
+                }
             }
         }
     }
@@ -129,6 +147,7 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
             }
         }
         RoundIcon(Icons.Rounded.Refresh, "목록 새로 고침", onClick = chats.onRefresh)
+        RoundIcon(Icons.Rounded.Menu, "메뉴", onClick = chats.onMenu)
         RoundIcon(Icons.Rounded.EditNote, "새 대화", filled = true, onClick = chats.onNew)
     }
     // General chats and each bot's chats are separate lists. Bots come from the server's roster, or,

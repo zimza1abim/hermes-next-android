@@ -145,6 +145,8 @@ import com.hermeswebui.android.ui.settings.VpnLaunchAppOption
 import com.hermeswebui.android.ui.web.WebShell
 import com.hermeswebui.android.webapp.GatewayAlertKind
 import com.hermeswebui.android.webapp.WebappGatewayCoordinator
+import com.hermeswebui.android.assistant.ChatActivity
+import com.hermeswebui.android.assistant.NativeHome
 import com.hermeswebui.android.webui.HermesWebUiScripts
 import com.hermeswebui.android.webui.VoiceCaptureLifecycleGate
 import com.hermeswebui.android.webview.HermesMediaPlaybackPolicy
@@ -388,8 +390,21 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    /**
+     * The app icon opens the native chats once this server is known to be a Webapp. Every other way in
+     * (a notification, a link, a shortcut, the chats' own "open Webapp") shows this screen.
+     */
+    private fun opensNativeChats(intent: Intent?): Boolean =
+        intent?.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) &&
+            NativeHome.enabled(this) && WebappGatewayCoordinator.isKnownWebapp(this)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null && opensNativeChats(intent)) {
+            startActivity(Intent(this, ChatActivity::class.java))
+            finish()
+            return
+        }
 
         val defaultUrl = getString(R.string.default_server_url)
         val defaultDashboardUrl = getString(R.string.default_dashboard_url)
@@ -553,6 +568,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (opensNativeChats(intent)) {
+            // The icon was tapped while this screen is still in the task: the chats open over it.
+            startActivity(Intent(this, ChatActivity::class.java))
+            return
+        }
         setIntent(intent)
         if (appUpdateCoordinator.handleIntent(intent)) {
             return

@@ -13,6 +13,7 @@
 [![Fork of hermes-android](https://img.shields.io/badge/fork%20of-hermes--webui%2Fhermes--android-555?logo=github)](https://github.com/hermes-webui/hermes-android)
 
 [Highlights](#-highlights) ·
+[Native chats](#-native-chats) ·
 [How it works](#-how-it-works) ·
 [Notifications](#-notifications) ·
 [Gateway hook](#-gateway-hook) ·
@@ -48,6 +49,34 @@ alerts, and answering Hermes straight from the notification.
 | 🔁 **Nothing missed** | Events from a dropped connection are replayed when it comes back. |
 | 🌸 **Quick assistant** | A small panel over any app: ask, search, translate or summarize, with photos, without opening the full app. |
 | 🎨 **Hermes branding** | App name **Hermes**, the Hermes Agent launcher icon, and matching notification icons. |
+
+## 📱 Native chats
+
+The app icon opens a native screen, not the Webapp page. It talks to the gateway
+socket and the server's HTTP API directly, in the same rose style as the quick
+assistant panel.
+
+| Screen | What it does |
+|---|---|
+| **Chats** | Recent chats with preview and time, search, and a tab for general chats and one per bot |
+| **Conversation** | Earlier transcript, live answers, stop, photos, approvals, code blocks that scroll and copy, model and reasoning level |
+| **Bots** | Each bot's picture and @name head its answers; a bot without a picture shows the Hermes icon |
+| **Cron jobs** | Every profile's jobs: run now, pause, resume |
+| **Skills · tools · MCP** | What the selected profile has, and what is switched on |
+| **Font** | Any Galaxy font installed on the phone, applied to every native screen |
+
+- **No page to boot.** A chat opens about a second after the tap; the Webapp page
+  took about 12 seconds from a cold start over the same link.
+- **The font is loaded before the first frame.** The picked font's file is copied
+  into the app and read synchronously at start, so nothing is drawn in another
+  font first.
+- **The Webapp is still there** for sign-in and everything the native screens do
+  not cover (Menu › Open Webapp). Menu › "Start on this screen" switches the app
+  icon back to it.
+
+> [!NOTE]
+> The gateway's wire protocol is not a public API. A Hermes update can change it,
+> and the native screens depend on more of it than the background monitor does.
 
 ## 🧠 How it works
 
