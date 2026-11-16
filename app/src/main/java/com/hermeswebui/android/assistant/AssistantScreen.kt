@@ -47,6 +47,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -123,6 +125,8 @@ internal class AssistantActions(
     val onDraft: (String) -> Unit,
     val onMode: (AssistantMode) -> Unit,
     val onModel: (AssistantModel?) -> Unit,
+    val onEffort: (String?) -> Unit,
+    val onBrowseModels: () -> Unit,
     val onSend: () -> Unit,
     val onStop: () -> Unit,
     val onAgain: (String) -> Unit,
@@ -222,7 +226,7 @@ private fun Panel(
                         .then(if (expanded) Modifier else Modifier.height(if (conversation) CHAT_BODY else IDLE_BODY))
                         .padding(horizontal = 20.dp)
                 ) {
-                    if (conversation) Conversation(state, replaceable, actions) else Greeting(models, actions.onModel)
+                    if (conversation) Conversation(state, replaceable, actions) else Greeting(models, actions)
                 }
                 Footer(state, draft, mode, photos, preparing, conversation, actions)
             }
@@ -280,17 +284,17 @@ private fun Elapsed(turnId: String) {
     Text(" · %02d:%02d".format(seconds / 60, seconds % 60), style = RoseType.Meta, maxLines = 1)
 }
 
-/** The starred models to pick from and the one new chats use (null: Hermes's own choice). */
-internal data class ModelChoice(val favourites: List<AssistantModel>, val selected: AssistantModel?)
+/** The starred models, the full list as far as it was read, and what new chats are created with. */
+internal data class ModelChoice(val favourites: List<AssistantModel>, val setup: ChatSetup, val catalog: Catalog)
 
 @Composable
-private fun Greeting(models: ModelChoice, onModel: (AssistantModel?) -> Unit) {
+private fun Greeting(models: ModelChoice, actions: AssistantActions) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("반가워요", style = RoseType.Label)
             BeatingHeart(Modifier.padding(start = 6.dp))
             Spacer(Modifier.weight(1f))
-            if (models.favourites.isNotEmpty()) ModelChip(models, onModel)
+            ModelChip(models, actions)
         }
         Text("무엇을 도와드릴까요?", style = RoseType.Greeting, maxLines = 2, modifier = Modifier.padding(top = 6.dp))
     }
@@ -515,32 +519,36 @@ private fun Footer(
     }
 }
 
-/** The model new chats run on, from the models starred in Hermes. */
+/** The model and reasoning new chats run with: the models starred in Hermes first, every model a tap away. */
 @Composable
-private fun ModelChip(models: ModelChoice, onModel: (AssistantModel?) -> Unit) {
+private fun ModelChip(models: ModelChoice, actions: AssistantActions) {
     var open by remember { mutableStateOf(false) }
+    var browsing by remember { mutableStateOf(false) }
     val sheen = flowing(4_200, "model")
+    val setup = models.setup
+    val custom = setup.model != null || setup.effort != null
     Box {
         Row(
             Modifier.clip(RoundedCornerShape(16.dp))
                 .background(Rose.Field)
-                .then(if (models.selected != null) Modifier.pearlSheen { sheen.value } else Modifier)
-                .border(1.dp, if (open || models.selected != null) Rose.Rose else Rose.Border, RoundedCornerShape(16.dp))
-                .clickable(role = Role.Button) { open = true }
-                .semantics { contentDescription = "모델 고르기" }
+                .then(if (custom) Modifier.pearlSheen { sheen.value } else Modifier)
+                .border(1.dp, if (open || custom) Rose.Rose else Rose.Border, RoundedCornerShape(16.dp))
+                .clickable(role = Role.Button) { browsing = false; open = true }
+                .semantics { contentDescription = "모델과 추론 강도 고르기" }
                 .heightIn(min = 32.dp)
                 .padding(start = 10.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("◆", fontSize = 9.sp, color = if (models.selected != null) Rose.Deep else Rose.Petal)
+            Text("◆", fontSize = 9.sp, color = if (custom) Rose.Deep else Rose.Petal)
+            val effort = EFFORTS.firstOrNull { it.first == setup.effort && it.first != null }?.second
             Text(
-                models.selected?.let { modelName(it.model) } ?: "기본 모델",
+                listOfNotNull(setup.model?.let { modelName(it.model) } ?: "기본 모델", effort).joinToString(" · "),
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = Rose.ChipText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 6.dp).widthIn(max = 132.dp),
+                modifier = Modifier.padding(start = 6.dp).widthIn(max = 150.dp),
             )
             Icon(Icons.Rounded.KeyboardArrowDown, null, tint = Rose.Muted, modifier = Modifier.size(18.dp))
         }
@@ -551,13 +559,120 @@ private fun ModelChip(models: ModelChoice, onModel: (AssistantModel?) -> Unit) {
             containerColor = Rose.Panel,
             border = BorderStroke(1.dp, Rose.Border),
             shadowElevation = 6.dp,
-            modifier = Modifier.heightIn(max = 340.dp).widthIn(min = 220.dp),
+            modifier = Modifier.heightIn(max = 420.dp).width(272.dp),
         ) {
-            Text("MODEL", style = RoseType.Meta, modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 4.dp))
-            ModelRow("기본 모델", "Hermes 설정", models.selected == null) { open = false; onModel(null) }
-            models.favourites.forEach { entry ->
-                ModelRow(modelName(entry.model), entry.provider, entry == models.selected) { open = false; onModel(entry) }
+            val pick: (AssistantModel?) -> Unit = { open = false; actions.onModel(it) }
+            if (browsing) AllModels(models, onBack = { browsing = false }, onRetry = actions.onBrowseModels, onPick = pick)
+            else {
+                MenuLabel("THINKING")
+                EffortChips(setup.effort, actions.onEffort)
+                MenuLabel("MODEL")
+                ModelRow("기본 모델", "Hermes 설정", setup.model == null) { pick(null) }
+                models.favourites.forEach { entry ->
+                    ModelRow(modelName(entry.model), entry.provider, entry == setup.model) { pick(entry) }
+                }
+                setup.model?.takeIf { it !in models.favourites }?.let { entry ->
+                    ModelRow(modelName(entry.model), entry.provider, true) { pick(entry) }
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp).clip(RoundedCornerShape(14.dp))
+                        .clickable(role = Role.Button) { browsing = true; actions.onBrowseModels() }
+                        .heightIn(min = 44.dp).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("모든 모델", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Rose.Deep, modifier = Modifier.weight(1f))
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = Rose.Deep, modifier = Modifier.size(18.dp))
+                }
             }
+        }
+    }
+}
+
+/** Reasoning levels offered, as Hermes's composer offers them; null leaves Hermes's setting. */
+private val EFFORTS = listOf(null to "기본", "none" to "끔", "low" to "낮게", "medium" to "보통", "high" to "높게", "xhigh" to "최고")
+
+@Composable
+private fun EffortChips(effort: String?, onEffort: (String?) -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 12.dp).padding(bottom = 6.dp).horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        EFFORTS.forEach { (value, label) ->
+            val selected = value == effort
+            Text(
+                label,
+                fontSize = 12.5.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) Rose.ChipText else Rose.Muted,
+                maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(14.dp))
+                    .background(if (selected) Rose.Bubble else Rose.Field)
+                    .border(1.dp, if (selected) Rose.Rose else Rose.Border, RoundedCornerShape(14.dp))
+                    .selectable(selected = selected, role = Role.RadioButton) { onEffort(value) }
+                    .heightIn(min = 32.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MenuLabel(text: String) {
+    Text(text, style = RoseType.Meta, modifier = Modifier.padding(start = 18.dp, top = 8.dp, bottom = 6.dp))
+}
+
+/** Every signed-in provider's models, searchable. */
+@Composable
+private fun AllModels(models: ModelChoice, onBack: () -> Unit, onRetry: () -> Unit, onPick: (AssistantModel) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val catalog = models.catalog
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 6.dp).clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClick = onBack).heightIn(min = 40.dp).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "뒤로", tint = Rose.Muted, modifier = Modifier.size(20.dp))
+        Text("모든 모델", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Rose.Text, modifier = Modifier.weight(1f).padding(start = 4.dp))
+        if (catalog.loading) Text("LOADING", style = RoseType.Meta.copy(color = Rose.Rose))
+    }
+    BasicTextField(
+        value = query,
+        onValueChange = { query = it },
+        singleLine = true,
+        textStyle = RoseType.Body.copy(fontSize = 14.sp),
+        cursorBrush = SolidColor(Rose.Deep),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(14.dp)).background(Rose.Field).border(1.dp, Rose.Border, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        decorationBox = { field ->
+            Box {
+                if (query.isEmpty()) Text("모델 찾기", fontSize = 14.sp, color = Rose.Muted)
+                field()
+            }
+        },
+    )
+    val needle = query.trim().lowercase()
+    val shown = catalog.providers.mapNotNull { provider ->
+        val hits = provider.models.filter {
+            needle.isEmpty() || it.model.lowercase().contains(needle) || modelName(it.model).lowercase().contains(needle) ||
+                provider.name.lowercase().contains(needle)
+        }
+        if (hits.isEmpty()) null else provider to hits
+    }
+    when {
+        catalog.failed -> Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("목록을 불러오지 못했어요", fontSize = 13.sp, color = Rose.Muted, modifier = Modifier.weight(1f))
+            PillButton("다시", filled = false, onClick = onRetry)
+        }
+        shown.isEmpty() && !catalog.loading -> Text(
+            if (needle.isEmpty()) "로그인된 제공자가 없어요" else "찾는 모델이 없어요",
+            fontSize = 13.sp, color = Rose.Muted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+        )
+    }
+    shown.forEach { (provider, hits) ->
+        MenuLabel(provider.name.uppercase())
+        hits.forEach { entry ->
+            ModelRow(modelName(entry.model), entry.model, entry == models.setup.model) { onPick(entry) }
         }
     }
 }

@@ -9,6 +9,9 @@ import com.hermeswebui.android.webapp.TurnOutcome
 /** What the user asked for; the panel turns it into the prompt text it sends. */
 enum class AssistantMode { ASK, SEARCH, TRANSLATE, SUMMARY }
 
+/** What a new chat is created with; null fields are Hermes's own settings. */
+data class ChatSetup(val model: AssistantModel? = null, val effort: String? = null)
+
 /** A model the chat is created with, as Hermes names it: provider slug and model id. */
 data class AssistantModel(val provider: String, val model: String) {
     /** The `provider::model` form Hermes stores favourites in. */
@@ -70,8 +73,8 @@ data class AssistantTurn(
     val images: List<String> = emptyList(),
     /** What the server returned for each uploaded photo of [images]. */
     val attached: Map<String, ImageAttachment> = emptyMap(),
-    /** The model a chat this turn creates runs on; null is the server's own choice. */
-    val model: AssistantModel? = null,
+    /** What a chat this turn creates runs with. */
+    val setup: ChatSetup = ChatSetup(),
 ) {
     val answer: String get() = final ?: segments.toSortedMap().values.joinToString("\n\n")
 }
@@ -125,7 +128,7 @@ sealed interface AssistantInput {
         val question: String,
         val prompt: String,
         val images: List<String> = emptyList(),
-        val model: AssistantModel? = null,
+        val setup: ChatSetup = ChatSetup(),
     ) : AssistantInput
     data object Stop : AssistantInput
     /** Asks a failed or stopped question again, as a new turn [newId] in its place. */
@@ -190,14 +193,14 @@ object AssistantMachine {
         is AssistantInput.Ask -> {
             val text = input.question.trim()
             if ((text.isEmpty() && input.images.isEmpty()) || state.turns.any { it.id == input.id }) state to emptyList()
-            else state.copy(turns = (state.turns + AssistantTurn(input.id, input.mode, text, input.prompt, images = input.images, model = input.model))
+            else state.copy(turns = (state.turns + AssistantTurn(input.id, input.mode, text, input.prompt, images = input.images, setup = input.setup))
                 .takeLast(MAX_TURNS)) to emptyList()
         }
         AssistantInput.Stop -> stop(state)
         is AssistantInput.Again -> {
             val old = state.turns.firstOrNull { it.id == input.turnId && (it.status == TurnStatus.FAILED || it.status == TurnStatus.STOPPED) }
             if (old == null || state.turns.any { it.id == input.newId }) state to emptyList()
-            else state.copy(turns = state.turns - old + AssistantTurn(input.newId, old.mode, old.question, old.prompt, images = old.images, model = old.model)) to emptyList()
+            else state.copy(turns = state.turns - old + AssistantTurn(input.newId, old.mode, old.question, old.prompt, images = old.images, setup = old.setup)) to emptyList()
         }
         AssistantInput.NewChat -> if (state.busy) state to emptyList()
             else state.copy(runtimeId = null, storedId = null, turns = emptyList(), requests = emptyList()) to emptyList()
@@ -248,7 +251,7 @@ object AssistantMachine {
             if (state.storedId != null) return state to emptyList()
             val id = state.nextId
             return state.copy(nextId = id + 1, calls = state.calls + (id to PendingCall.Create)) to
-                listOf(AssistantEffect.Send(state.gen, AssistantProtocol.create(id, state.authority, "assistant-${queued.id}", queued.model)))
+                listOf(AssistantEffect.Send(state.gen, AssistantProtocol.create(id, state.authority, "assistant-${queued.id}", queued.setup)))
         }
         if (state.activeTurn != null) return state to emptyList()
         val uploading = state.calls.values.filterIsInstance<PendingCall.Attach>().filter { it.turnId == queued.id }.map { it.imageId }

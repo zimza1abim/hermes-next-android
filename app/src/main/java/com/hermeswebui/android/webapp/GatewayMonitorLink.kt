@@ -14,8 +14,8 @@ import org.json.JSONObject
 
 /** The configured server's gateway endpoints, under its base path. */
 data class MonitorEndpoint(val origin: String, val ticketUrl: String, val socketUrl: String) {
-    /** The machine's shared UI preferences, next to the ticket endpoint under the same base path. */
-    val preferencesUrl: String get() = ticketUrl.substringBefore("/api/webapp/") + "/api/ui-preferences"
+    /** A server API address under the same base path as the ticket endpoint, e.g. `/api/ui-preferences`. */
+    fun api(path: String): String = ticketUrl.substringBefore("/api/webapp/") + path
 
     companion object {
         fun from(serverUrl: String): MonitorEndpoint? {

@@ -85,11 +85,24 @@ class AssistantProtocolTest {
     }
 
     @Test
-    fun `a chosen model is pinned on the new chat only`() {
-        val params = JSONObject(AssistantProtocol.create(3, false, "r", AssistantModel("anthropic", "claude-opus-5-5[1m]"))).getJSONObject("params")
+    fun `a chosen model and reasoning are pinned on the new chat only`() {
+        val setup = ChatSetup(AssistantModel("anthropic", "claude-opus-5-5[1m]"), "high")
+        val params = JSONObject(AssistantProtocol.create(3, false, "r", setup)).getJSONObject("params")
         assertThat(params.getString("model")).isEqualTo("claude-opus-5-5[1m]")
         assertThat(params.getString("provider")).isEqualTo("anthropic")
-        assertThat(JSONObject(AssistantProtocol.create(3, false, "r")).getJSONObject("params").has("model")).isFalse()
+        assertThat(params.getString("reasoning_effort")).isEqualTo("high")
+        val plain = JSONObject(AssistantProtocol.create(3, false, "r")).getJSONObject("params")
+        assertThat(plain.has("model") || plain.has("reasoning_effort")).isFalse()
+    }
+
+    @Test
+    fun `the model list keeps signed-in providers and drops unavailable models`() {
+        val options = JSONObject("""{"providers":[
+            {"slug":"anthropic","name":"Anthropic","authenticated":true,"models":["claude-opus-5-5","claude-old"],"unavailable_models":["claude-old"]},
+            {"slug":"xai","name":"xAI","authenticated":false,"models":["grok-4.7"]},
+            {"slug":"empty","name":"Empty","models":[]}]}""")
+        assertThat(AssistantProtocol.catalog(options))
+            .containsExactly(CatalogProvider("anthropic", "Anthropic", listOf(AssistantModel("anthropic", "claude-opus-5-5"))))
     }
 
     @Test

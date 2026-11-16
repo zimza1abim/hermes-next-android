@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
  * The process's one assistant chat. It outlives the panel, so closing and reopening it keeps the
  * conversation and a running answer. Main thread only; every decision is [AssistantMachine]'s.
  */
+/** The full model list as far as it has been read. */
+data class Catalog(val providers: List<CatalogProvider> = emptyList(), val loading: Boolean = false, val failed: Boolean = false)
+
 class AssistantController private constructor(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private val repository = SettingsRepository(context)
@@ -32,27 +35,49 @@ class AssistantController private constructor(private val context: Context) {
     val mode = MutableStateFlow(AssistantMode.ASK)
     /** The models starred in Hermes, refreshed on every open; kept so the chip shows at once. */
     val favourites = MutableStateFlow(prefs.getString(KEY_FAVOURITES, "").orEmpty().split('\n').mapNotNull(AssistantModel::parse))
-    /** The model new chats run on; null is Hermes's own choice. */
-    val model = MutableStateFlow(prefs.getString(KEY_MODEL, null)?.let(AssistantModel::parse))
+    /** What new chats are created with. */
+    val setup = MutableStateFlow(ChatSetup(prefs.getString(KEY_MODEL, null)?.let(AssistantModel::parse), prefs.getString(KEY_EFFORT, null)))
+    /** Every signed-in provider's models, read when the user browses beyond the favourites. */
+    val catalog = MutableStateFlow(Catalog())
     private var favouritesRead: SignInGate.Handle? = null
+    private var catalogRead: SignInGate.Handle? = null
 
     fun chooseModel(choice: AssistantModel?) {
-        model.value = choice
+        setup.value = setup.value.copy(model = choice)
         prefs.edit().putString(KEY_MODEL, choice?.key).apply()
     }
 
+    fun chooseEffort(effort: String?) {
+        setup.value = setup.value.copy(effort = effort)
+        prefs.edit().putString(KEY_EFFORT, effort).apply()
+    }
+
     private fun refreshFavourites() {
-        val server = repository.getSettings("", "").serverUrl.takeIf { it.isNotBlank() } ?: return
-        val endpoint = MonitorEndpoint.from(server) ?: return
         favouritesRead?.cancel()
-        favouritesRead = SignInGate.preferences(endpoint, server) { reply ->
-            val list = reply?.let(AssistantProtocol::favourites) ?: return@preferences
-            handler.post {
-                favourites.value = list
-                prefs.edit().putString(KEY_FAVOURITES, list.joinToString("\n") { it.key }).apply()
-                if (model.value != null && model.value !in list) chooseModel(null)
-            }
+        favouritesRead = readApi("/api/ui-preferences") { reply ->
+            val list = reply?.let(AssistantProtocol::favourites) ?: return@readApi
+            favourites.value = list
+            prefs.edit().putString(KEY_FAVOURITES, list.joinToString("\n") { it.key }).apply()
         }
+    }
+
+    /** Reads the full model list; a list already read is shown while it refreshes. */
+    fun loadCatalog() {
+        if (catalog.value.loading) return
+        catalog.value = catalog.value.copy(loading = true, failed = false)
+        catalogRead?.cancel()
+        catalogRead = readApi("/api/model/options") { reply ->
+            val providers = reply?.let(AssistantProtocol::catalog)
+            catalog.value = if (providers == null) catalog.value.copy(loading = false, failed = catalog.value.providers.isEmpty())
+                else Catalog(providers)
+        } ?: run { catalog.value = catalog.value.copy(loading = false, failed = true); null }
+    }
+
+    /** [done] runs on the main thread with the reply, or null when it failed. Null when no server is set. */
+    private fun readApi(path: String, done: (org.json.JSONObject?) -> Unit): SignInGate.Handle? {
+        val server = repository.getSettings("", "").serverUrl.takeIf { it.isNotBlank() } ?: return null
+        val endpoint = MonitorEndpoint.from(server) ?: return null
+        return SignInGate.getJson(endpoint, path, server) { reply -> handler.post { done(reply) } }
     }
 
     fun setDraft(text: String) {
@@ -105,7 +130,7 @@ class AssistantController private constructor(private val context: Context) {
         if (text.isEmpty() && photos.isEmpty()) return
         val prompt = if (text.isEmpty()) PHOTO_ONLY_PROMPT else promptFor(mode, text)
         pendingImages.value = emptyList()
-        dispatch(AssistantInput.Ask(UUID.randomUUID().toString(), mode, text, prompt, photos, model.value))
+        dispatch(AssistantInput.Ask(UUID.randomUUID().toString(), mode, text, prompt, photos, setup.value))
     }
 
     /** Reads, shrinks and re-encodes a photo off the main thread, then adds it to the next question. */
@@ -195,6 +220,7 @@ class AssistantController private constructor(private val context: Context) {
         private const val MAX_PHOTOS = 4
         private const val KEY_DRAFT = "draft"
         private const val KEY_MODEL = "model"
+        private const val KEY_EFFORT = "effort"
         private const val KEY_FAVOURITES = "favourites"
         private const val MAX_KEPT = 24
         const val PHOTO_ONLY_PROMPT = "이 사진을 보고 무엇인지 설명해 줘."

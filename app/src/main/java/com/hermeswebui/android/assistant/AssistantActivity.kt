@@ -56,7 +56,8 @@ class AssistantActivity : ComponentActivity() {
             val photos by controller.pendingImages.collectAsState()
             val preparing by controller.preparing.collectAsState()
             val favourites by controller.favourites.collectAsState()
-            val model by controller.model.collectAsState()
+            val setup by controller.setup.collectAsState()
+            val catalog by controller.catalog.collectAsState()
             AssistantScreen(
                 state = state,
                 draft = draft,
@@ -64,7 +65,7 @@ class AssistantActivity : ComponentActivity() {
                 photos = photos,
                 preparing = preparing,
                 replaceable = replaceable.value,
-                models = ModelChoice(favourites, model),
+                models = ModelChoice(favourites, setup, catalog),
                 actions = actions,
             )
         }
@@ -76,6 +77,8 @@ class AssistantActivity : ComponentActivity() {
                     onDraft = controller::setDraft,
                     onMode = { controller.mode.value = it },
                     onModel = controller::chooseModel,
+                    onEffort = controller::chooseEffort,
+                    onBrowseModels = controller::loadCatalog,
                     onSend = ::send,
                     onStop = controller::stop,
                     onAgain = controller::again,

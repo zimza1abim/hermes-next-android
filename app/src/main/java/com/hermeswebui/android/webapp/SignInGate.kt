@@ -80,12 +80,12 @@ internal object SignInGate {
         }
 
     /**
-     * Reads the machine's shared UI preferences (where Hermes keeps favourite models), in order with
-     * the ticket requests: any signed request may rotate the sign-in cookie. [done] gets null on failure.
+     * Reads a JSON object from the server API at [path], in order with the ticket requests: any signed
+     * request may rotate the sign-in cookie. [done] gets null on failure.
      */
-    fun preferences(endpoint: MonitorEndpoint, cookieUrl: String, done: (JSONObject?) -> Unit): Handle =
+    fun getJson(endpoint: MonitorEndpoint, path: String, cookieUrl: String, done: (JSONObject?) -> Unit): Handle =
         exchange(cookieUrl, null, done, failed = { null }, target = {
-            url(endpoint.preferencesUrl).get().header("Origin", endpoint.origin)
+            url(endpoint.api(path)).get().header("Origin", endpoint.origin)
         }) { code, body, _ ->
             if (code !in 200..299) null else runCatching { JSONTokener(body).nextValue() as? JSONObject }.getOrNull()
         }

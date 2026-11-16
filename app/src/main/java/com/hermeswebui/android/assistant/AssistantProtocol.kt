@@ -56,6 +56,9 @@ sealed interface AssistantFrame {
  * The gateway calls the panel makes (hermes-agent `apps/shared/src/gateway-contract.generated.ts`).
  * Canonical servers (`session_authority`) and legacy `hermes serve` take slightly different params.
  */
+/** One signed-in provider and the models it serves. */
+data class CatalogProvider(val slug: String, val name: String, val models: List<AssistantModel>)
+
 object AssistantProtocol {
     /** A pre-admission refusal of an unknown param (4000) or a capability (4094): safe to resend without it. */
     val PRE_ADMISSION_CODES = setOf(4000, 4094)
@@ -63,11 +66,12 @@ object AssistantProtocol {
 
     fun capabilities(id: Int): String = call(id, "client.capabilities", JSONObject().put("server_requests", true))
 
-    /** [model] pins this chat's model only; Hermes's own setting is left as it is. */
-    fun create(id: Int, authority: Boolean, requestId: String, model: AssistantModel? = null): String =
+    /** [setup] pins this chat's model and reasoning only; Hermes's own settings are left as they are. */
+    fun create(id: Int, authority: Boolean, requestId: String, setup: ChatSetup = ChatSetup()): String =
         call(id, "session.create", JSONObject().apply {
             if (authority) put("request_id", requestId)
-            if (model != null) put("model", model.model).put("provider", model.provider)
+            setup.model?.let { put("model", it.model).put("provider", it.provider) }
+            setup.effort?.let { put("reasoning_effort", it) }
         })
 
     /**
@@ -179,6 +183,22 @@ object AssistantProtocol {
         } ?: return emptyList()
         return (0 until keys.length()).mapNotNull { (keys.opt(it) as? String)?.let(AssistantModel::parse) }.distinct()
     }
+
+    /** The signed-in providers' models from `/api/model/options`, in the server's order. */
+    fun catalog(options: JSONObject): List<CatalogProvider> {
+        val providers = options.optJSONArray("providers") ?: return emptyList()
+        return (0 until providers.length()).mapNotNull { index ->
+            val row = providers.optJSONObject(index) ?: return@mapNotNull null
+            val slug = text(row, "slug") ?: return@mapNotNull null
+            if (row.opt("authenticated") == false) return@mapNotNull null
+            val unavailable = strings(row.optJSONArray("unavailable_models")).toSet()
+            val models = strings(row.optJSONArray("models")).filter { it !in unavailable }.distinct()
+            if (models.isEmpty()) null else CatalogProvider(slug, text(row, "name") ?: slug, models.map { AssistantModel(slug, it) })
+        }
+    }
+
+    private fun strings(array: JSONArray?): List<String> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { (array.opt(it) as? String)?.trim()?.takeIf(String::isNotEmpty) }
 
     private const val FAVOURITES_KEY = "hermes.desktop.favorite-models"
 
