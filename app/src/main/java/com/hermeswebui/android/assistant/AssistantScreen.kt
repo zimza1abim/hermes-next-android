@@ -16,6 +16,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -468,45 +473,151 @@ private fun HistoryItem(row: HistoryRow, named: Boolean) {
     }
 }
 
-/** The answer as paragraph blocks: while it streams only the last block changes, so only it is laid out again. */
+/** The answer block by block: while it streams only the last block changes, so only it is laid out again. */
 @Composable
 internal fun Answer(shown: String, writing: Boolean) {
-    val blocks = remember(shown) { AssistantMarkdown.blocks(shown) }
+    val blocks = remember(shown) { AssistantMarkdown.parse(shown) }
     SelectionContainer {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
             blocks.forEachIndexed { index, block ->
                 val tail = writing && index == blocks.lastIndex
-                val code = remember(block) { AssistantMarkdown.codeBlock(block) }
-                if (code != null) CodeBlock(code)
-                else {
-                    val styled = remember(block, tail) {
-                        AssistantMarkdown.render(block, caret = tail).let { if (tail) shimmerTail(it) else it }
+                when (block) {
+                    is AssistantMarkdown.Block.Paragraph -> {
+                        val styled = remember(block, tail) { AssistantMarkdown.inlineText(block.text, caret = tail).let { if (tail) shimmerTail(it) else it } }
+                        Text(styled, style = RoseType.Body)
                     }
-                    Text(styled, style = RoseType.Body)
+                    is AssistantMarkdown.Block.Heading -> HeadingBlock(block)
+                    is AssistantMarkdown.Block.Items -> ItemsBlock(block, tail)
+                    is AssistantMarkdown.Block.Quote -> QuoteBlock(block)
+                    is AssistantMarkdown.Block.Fence -> CodeBlock(block.code)
+                    is AssistantMarkdown.Block.Table -> TableBlock(block)
+                    AssistantMarkdown.Block.Rule -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(Rose.Border))
                 }
             }
         }
     }
 }
 
-/** A fenced block on its own: long lines scroll sideways instead of wrapping, and the code copies alone. */
+@Composable
+private fun HeadingBlock(block: AssistantMarkdown.Block.Heading) {
+    val size = when (block.level) { 1 -> 21.sp; 2 -> 18.5.sp; else -> 16.5.sp }
+    val styled = remember(block) { AssistantMarkdown.inlineText(block.text) }
+    Column(Modifier.padding(top = if (block.level <= 2) 6.dp else 2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // A petal marks a section; the two top levels also get a rule under them.
+            Box(Modifier.size(width = 4.dp, height = if (block.level <= 2) 20.dp else 16.dp).clip(RoundedCornerShape(2.dp)).background(Rose.Rose))
+            Text(styled, style = RoseType.Body.copy(fontSize = size, lineHeight = size * 1.35f, fontWeight = FontWeight.Bold), modifier = Modifier.padding(start = 9.dp))
+        }
+        if (block.level <= 2) Box(Modifier.fillMaxWidth().padding(top = 7.dp).height(1.dp).background(Rose.Border))
+    }
+}
+
+@Composable
+private fun ItemsBlock(block: AssistantMarkdown.Block.Items, tail: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        block.items.forEachIndexed { index, item ->
+            val last = tail && index == block.items.lastIndex
+            val styled = remember(item, last) { AssistantMarkdown.inlineText(item.text, caret = last).let { if (last) shimmerTail(it) else it } }
+            // The marker sits in its own column, so a wrapped line lines up with the text above it.
+            Row(Modifier.padding(start = (item.depth.coerceAtMost(4) * 16).dp)) {
+                if (item.marker != null) Text(item.marker, style = RoseType.Body.copy(color = Rose.Deep, fontWeight = FontWeight.SemiBold), modifier = Modifier.widthIn(min = 24.dp))
+                else Box(Modifier.width(18.dp).padding(top = 11.dp)) { Box(Modifier.size(6.dp).clip(CircleShape).background(if (item.depth == 0) Rose.Deep else Rose.Rose)) }
+                Text(styled, style = RoseType.Body, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuoteBlock(block: AssistantMarkdown.Block.Quote) {
+    val styled = remember(block) { AssistantMarkdown.inlineText(block.text) }
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(10.dp)).background(Rose.Soft)) {
+        Box(Modifier.fillMaxHeight().width(4.dp).background(Rose.Rose))
+        Text(styled, style = RoseType.Body.copy(fontSize = 15.sp, lineHeight = 24.sp, color = Rose.Muted), modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
+    }
+}
+
+/** A table that scrolls sideways when it is wider than the screen; every column is as wide as its widest cell. */
+@Composable
+private fun TableBlock(block: AssistantMarkdown.Block.Table) {
+    val columns = block.rows.maxOf { it.size }
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).border(1.dp, Rose.Border, RoundedCornerShape(12.dp)).horizontalScroll(rememberScrollState())) {
+        for (column in 0 until columns) {
+            Column(Modifier.width(IntrinsicSize.Max)) {
+                block.rows.forEachIndexed { row, cells ->
+                    val styled = remember(cells, column) { AssistantMarkdown.inlineText(cells.getOrElse(column) { "" }) }
+                    Text(
+                        styled,
+                        style = RoseType.Body.copy(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = if (row == 0) FontWeight.Bold else FontWeight.Normal),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 240.dp)
+                            .background(if (row == 0) Rose.Soft else if (row % 2 == 0) Rose.Field else Color.Transparent)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Code as an editor pane: a title bar with the language and a copy button, line numbers, and tinted tokens. */
 @Composable
 private fun CodeBlock(code: AssistantMarkdown.Code) {
     val clipboard = LocalClipboardManager.current
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Rose.Soft)) {
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(code.language.ifEmpty { "code" }.uppercase(), style = RoseType.Meta, modifier = Modifier.weight(1f))
-            Box(
-                Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) { clipboard.setText(AnnotatedString(code.text)) }
-                    .semantics { contentDescription = "코드 복사" },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Rounded.ContentCopy, null, tint = Rose.Muted, modifier = Modifier.size(15.dp)) }
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1_600)
+            copied = false
         }
-        Text(
-            code.text, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp, color = Rose.Text, softWrap = false,
-            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-        )
     }
+    val lines = remember(code.text) { code.text.lines().size }
+    val tinted = remember(code.text) {
+        AssistantMarkdown.highlight(code.text, comment = SpanStyle(color = Editor.Comment, fontStyle = FontStyle.Italic),
+            string = SpanStyle(color = Editor.String), number = SpanStyle(color = Editor.Number), keyword = SpanStyle(color = Editor.Keyword, fontWeight = FontWeight.SemiBold))
+    }
+    val numbers = remember(lines) { (1..lines).joinToString("\n") }
+    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Editor.Back).border(1.dp, Editor.Edge, RoundedCornerShape(16.dp))) {
+        Row(Modifier.fillMaxWidth().background(Editor.Bar).padding(start = 14.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(Editor.Dot1, Editor.Dot2, Editor.Dot3).forEach { Box(Modifier.size(9.dp).clip(CircleShape).background(it)) }
+            }
+            Text(code.language.ifEmpty { "code" }, fontFamily = FontFamily.Monospace, fontSize = 11.5.sp, color = Editor.Dim, maxLines = 1,
+                modifier = Modifier.padding(start = 12.dp).weight(1f))
+            Row(
+                Modifier.heightIn(min = 38.dp).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button) {
+                    clipboard.setText(AnnotatedString(code.text))
+                    copied = true
+                }.padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy, null, tint = Editor.Dim, modifier = Modifier.size(14.dp))
+                Text(if (copied) "복사됨" else "복사", fontSize = 11.5.sp, color = Editor.Dim, modifier = Modifier.padding(start = 5.dp))
+            }
+        }
+        Row(Modifier.padding(vertical = 12.dp)) {
+            if (lines > 1) Text(numbers, style = mono.copy(color = Editor.Gutter, textAlign = TextAlign.End), modifier = Modifier.padding(start = 12.dp, end = 10.dp))
+            Text(tinted, style = mono.copy(color = Editor.Text), softWrap = false,
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(start = if (lines > 1) 0.dp else 14.dp, end = 14.dp))
+        }
+    }
+}
+
+/** The code pane's own colours: a deep plum editor that sits in the rose screen. */
+private object Editor {
+    val Back = Color(0xFF2E1F2A)
+    val Bar = Color(0xFF3B2835)
+    val Edge = Color(0xFF4A3443)
+    val Text = Color(0xFFF6E7EE)
+    val Dim = Color(0xFFC9A9BA)
+    val Gutter = Color(0xFF7D6071)
+    val Comment = Color(0xFF9C8191)
+    val String = Color(0xFFF7C59F)
+    val Number = Color(0xFFB9E3C6)
+    val Keyword = Color(0xFFF59CC4)
+    val Dot1 = Color(0xFFF28FAD)
+    val Dot2 = Color(0xFFF7D08A)
+    val Dot3 = Color(0xFF9FD8B4)
 }
 
 @Composable

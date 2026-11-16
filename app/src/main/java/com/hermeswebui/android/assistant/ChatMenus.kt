@@ -29,6 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,7 +47,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** The screens of the native app. Back goes from a menu's own screen to the menu, then to the chats. */
-internal enum class Pane { LIST, CHAT, MENU, FONT, CRON, CAPABILITIES }
+internal enum class Pane { LIST, CHAT, MENU, FONT, CRON, CAPABILITIES, INSTALL }
 
 /** Whether the app icon opens the native chats instead of the Webapp page. On by default. */
 object NativeHome {
@@ -64,6 +67,9 @@ internal class MenuView(
     val skills: Listing<Capability>,
     val toolsets: Listing<Capability>,
     val mcp: Listing<Capability>,
+    val plugins: Listing<Installable>,
+    val mcpCatalog: Listing<Installable>,
+    val installing: Set<String>,
     val notice: String?,
     val nativeHome: Boolean,
     /** Whose capabilities are listed: the open tab's bot, or the general profile. */
@@ -75,6 +81,7 @@ internal class MenuActions(
     val onPickFont: (FontChoice?) -> Unit,
     val onCronPaused: (CronJob, Boolean) -> Unit,
     val onCronRun: (CronJob) -> Unit,
+    val onInstall: (Installable) -> Unit,
     val onRefresh: (Pane) -> Unit,
     val onAppSettings: () -> Unit,
     val onWebapp: () -> Unit,
@@ -90,6 +97,7 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
             LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), modifier = Modifier.fillMaxSize()) {
                 item { MenuRow("크론 작업", "예약 작업을 보고, 멈추고, 바로 실행해요") { actions.onPane(Pane.CRON) } }
                 item { MenuRow("스킬 · 도구 · MCP", "${view.capabilitiesOf}에 켜져 있는 것들") { actions.onPane(Pane.CAPABILITIES) } }
+                item { MenuRow("플러그인 · MCP 설치", "Hermes 카탈로그에서 골라 설치해요") { actions.onPane(Pane.INSTALL) } }
                 item { MenuRow("글꼴", HermesFonts.pickedLabel(LocalContext.current) ?: "휴대폰 기본 글꼴") { actions.onPane(Pane.FONT) } }
                 item { MenuRow("알림 · 앱 설정", "알림 종류, 미리보기, 배터리, 서버 주소", onClick = actions.onAppSettings) }
                 item { MenuRow("Webapp 열기", "로그인과 나머지 기능은 Webapp 화면에서", onClick = actions.onWebapp) }
@@ -138,7 +146,85 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
                 section("스킬", view.skills)
             }
         }
+        Pane.INSTALL -> {
+            PaneHeader("플러그인 · MCP 설치", onBack = { actions.onPane(Pane.MENU) }) {
+                RoundIcon(Icons.Rounded.Refresh, "새로 고침") { actions.onRefresh(Pane.INSTALL) }
+            }
+            Notice(view.notice, actions.onNoticeShown)
+            // A plugin is code that will run on the Hermes machine, so installing one is confirmed first.
+            var asking by remember { mutableStateOf<Installable?>(null) }
+            LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()) {
+                catalog("플러그인", view.plugins, view.installing) { asking = it }
+                catalog("MCP 서버", view.mcpCatalog, view.installing) { asking = it }
+            }
+            asking?.let { item ->
+                ConfirmDialog(
+                    title = "${item.title} 설치",
+                    body = (if (item.plugin) "Hermes가 돌아가는 컴퓨터에 이 플러그인의 코드를 설치하고 켜요." else "이 MCP 서버를 Hermes 설정에 추가하고 켜요.") +
+                        (item.source?.let { "\n\n$it" } ?: ""),
+                    confirm = "설치",
+                    onDismiss = { asking = null },
+                ) {
+                    asking = null
+                    actions.onInstall(item)
+                }
+            }
+        }
         Pane.LIST, Pane.CHAT -> Unit
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.catalog(
+    title: String, listing: Listing<Installable>, installing: Set<String>, onInstall: (Installable) -> Unit,
+) {
+    item(key = "catalog-$title") {
+        Row(Modifier.padding(top = 8.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = RoseType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp))
+            if (listing.rows.isNotEmpty()) Text("  ${listing.rows.count { it.installed }} / ${listing.rows.size} 설치됨", style = RoseType.Meta)
+        }
+    }
+    when {
+        listing.loading && listing.rows.isEmpty() -> item(key = "catalog-load-$title") { Text("읽는 중…", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
+        listing.failed && listing.rows.isEmpty() -> item(key = "catalog-fail-$title") { Text("카탈로그를 읽지 못했어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
+        listing.rows.isEmpty() -> item(key = "catalog-none-$title") { Text("카탈로그가 비어 있어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
+        else -> items(listing.rows.size, key = { "catalog-$title-${listing.rows[it].name}" }) { index ->
+            val item = listing.rows[index]
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Rose.Field).border(1.dp, Rose.Border, RoundedCornerShape(20.dp)).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(item.title, style = RoseType.Body.copy(fontSize = 15.5.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                item.detail?.let { Text(it, style = RoseType.Label, maxLines = 4, overflow = TextOverflow.Ellipsis) }
+                item.source?.let { Text(it, style = RoseType.Meta, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    when {
+                        item.installed -> Text("설치됨", style = RoseType.Label.copy(color = Rose.Online))
+                        item.name in installing -> Text("설치하는 중…", style = RoseType.Label)
+                        item.blocked != null -> Text("${item.blocked}. Webapp에서 설치해 주세요", style = RoseType.Label)
+                        else -> PillButton("설치", filled = true) { onInstall(item) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A yes/no question over the screen, in the app's own style. */
+@Composable
+internal fun ConfirmDialog(title: String, body: String, confirm: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Rose.Panel).border(1.dp, Rose.Border, RoundedCornerShape(26.dp)).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(title, style = RoseType.Body.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold))
+            Text(body, style = RoseType.Body.copy(fontSize = 14.5.sp, lineHeight = 22.sp))
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("취소", filled = false, modifier = Modifier.weight(1f), onClick = onDismiss)
+                PillButton(confirm, filled = true, modifier = Modifier.weight(1f), onClick = onConfirm)
+            }
+        }
     }
 }
 

@@ -28,7 +28,10 @@ class ChatActivity : ComponentActivity() {
     private val admin by lazy { HermesAdmin(this) }
     private val fonts = kotlinx.coroutines.flow.MutableStateFlow(Listing<FontChoice>())
     private val nativeHome = mutableStateOf(true)
-    private val tab = mutableStateOf<String?>(null)
+    private val tab = mutableStateOf<String?>(ChatsView.ALL)
+    private val listNotice = mutableStateOf<String?>(null)
+    /** The bot the open tab stands for; the full list and the main bot's tab are the server's own profile. */
+    private val tabProfile: String? get() = tab.value?.takeUnless { it == ChatsView.ALL }
     private var captureUri: Uri? = null
     private val pickPhotos = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris ->
         uris.forEach(controller::addImage)
@@ -48,7 +51,7 @@ class ChatActivity : ComponentActivity() {
         captureUri = savedInstanceState?.getString(STATE_CAPTURE)?.let(Uri::parse)
         pane.value = savedInstanceState?.getString(STATE_PANE)?.let { name -> Pane.entries.firstOrNull { it.name == name } } ?: Pane.LIST
         nativeHome.value = NativeHome.enabled(this)
-        tab.value = savedInstanceState?.getString(STATE_TAB)
+        if (savedInstanceState != null) tab.value = savedInstanceState.getString(STATE_TAB)
         controller.loadAvatars()
         setContent {
             val state by controller.state.collectAsState()
@@ -68,6 +71,9 @@ class ChatActivity : ComponentActivity() {
             val toolsets by admin.toolsets.collectAsState()
             val mcp by admin.mcp.collectAsState()
             val notice by admin.notice.collectAsState()
+            val plugins by admin.plugins.collectAsState()
+            val mcpCatalog by admin.mcpCatalog.collectAsState()
+            val installing by admin.installing.collectAsState()
             ChatScreen(
                 state = state,
                 draft = draft,
@@ -76,10 +82,10 @@ class ChatActivity : ComponentActivity() {
                 preparing = preparing,
                 models = ModelChoice(favourites, setup, catalog),
                 actions = actions,
-                view = ChatsView(chats, loading, avatars, controller::avatarKey, tab.value, pane.value),
+                view = ChatsView(chats, loading, avatars, controller::avatarKey, tab.value, pane.value, listNotice.value),
                 chats = chatsActions,
-                menu = MenuView(fontList, cron, skills, toolsets, mcp, notice, nativeHome.value,
-                    capabilitiesOf = tab.value?.let { name -> state.profiles.firstOrNull { it.name == name }?.title ?: name } ?: "일반 프로필"),
+                menu = MenuView(fontList, cron, skills, toolsets, mcp, plugins, mcpCatalog, installing, notice, nativeHome.value,
+                    capabilitiesOf = "@" + (state.profiles.firstOrNull { if (tabProfile == null) it.own else it.name == tabProfile }?.title ?: tabProfile ?: "메인 봇")),
                 menuActions = menuActions,
             )
         }
@@ -93,10 +99,21 @@ class ChatActivity : ComponentActivity() {
                 pane.value = Pane.CHAT
             },
             onNew = {
-                controller.selectProfile(tab.value)
+                controller.selectProfile(tabProfile)
                 pane.value = Pane.CHAT
             },
             onTab = { tab.value = it },
+            onDelete = { row ->
+                // Gone from the list at once; a refusal puts it back by reading the list again.
+                val open = controller.state.value.openedId == row.id
+                if (open) controller.selectProfile(controller.state.value.profile)
+                controller.chats.value = controller.chats.value.filterNot { it.id == row.id && it.profile == row.profile }
+                admin.deleteChat(row) { gone ->
+                    listNotice.value = if (gone) "대화를 지웠어요" else "지우지 못했어요. 열려 있거나 실행 중인 대화일 수 있어요"
+                    controller.refreshChats()
+                    window.decorView.postDelayed({ listNotice.value = null }, 2_500)
+                }
+            },
             onBackToList = {
                 pane.value = Pane.LIST
                 controller.refreshChats()
@@ -119,6 +136,7 @@ class ChatActivity : ComponentActivity() {
             onPickFont = { choice -> Thread { HermesFonts.pick(applicationContext, choice) }.start() },
             onCronPaused = admin::setCronPaused,
             onCronRun = admin::runCron,
+            onInstall = { admin.install(it, tabProfile) },
             onRefresh = ::load,
             onAppSettings = {
                 startActivity(com.hermeswebui.android.launcher.AppShortcuts.settingsIntent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -136,7 +154,8 @@ class ChatActivity : ComponentActivity() {
     private fun load(next: Pane) {
         when (next) {
             Pane.CRON -> admin.refreshCron()
-            Pane.CAPABILITIES -> admin.refreshCapabilities(tab.value)
+            Pane.CAPABILITIES -> admin.refreshCapabilities(tabProfile)
+            Pane.INSTALL -> admin.refreshCatalogs(tabProfile)
             Pane.FONT -> {
                 fonts.value = fonts.value.copy(loading = true)
                 val app = applicationContext

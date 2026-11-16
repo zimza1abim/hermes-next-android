@@ -48,6 +48,138 @@ internal object AssistantMarkdown {
         return blocks
     }
 
+    /** One piece of an answer, each drawn in its own way. */
+    sealed interface Block {
+        data class Heading(val level: Int, val text: String) : Block
+        data class Paragraph(val text: String) : Block
+        /** [marker] is the number of an ordered item ("3."), or null for a bullet. */
+        data class Item(val depth: Int, val marker: String?, val text: String)
+        data class Items(val items: List<Item>) : Block
+        data class Quote(val text: String) : Block
+        data class Fence(val code: Code) : Block
+        /** The first row is the header. */
+        data class Table(val rows: List<List<String>>) : Block
+        data object Rule : Block
+    }
+
+    private val ORDERED = Regex("^(\\s*)(\\d{1,3})[.)]\\s+")
+    private val RULE = Regex("^\\s*([-*_])(\\s*\\1){2,}\\s*$")
+    private val TABLE_RULE = Regex("^\\s*\\|?\\s*:?-+:?\\s*(\\|\\s*:?-+:?\\s*)*\\|?\\s*$")
+
+    /**
+     * [text] as blocks, line by line: headings, lists, quotes, tables and rules need no blank line
+     * around them, and an unfinished code fence (an answer still streaming) is a fence already.
+     */
+    fun parse(text: String): List<Block> {
+        val out = mutableListOf<Block>()
+        val lines = text.lines()
+        val paragraph = StringBuilder()
+        fun flush() {
+            if (paragraph.isNotBlank()) out += Block.Paragraph(paragraph.toString().trimEnd('\n'))
+            paragraph.setLength(0)
+        }
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            val trimmed = line.trimStart()
+            when {
+                trimmed.startsWith("```") -> {
+                    flush()
+                    val body = mutableListOf<String>()
+                    i++
+                    while (i < lines.size && !lines[i].trimStart().startsWith("```")) body += lines[i++]
+                    out += Block.Fence(Code(trimmed.removePrefix("```").trim().take(24), body.joinToString("\n")))
+                }
+                line.isBlank() -> flush()
+                HEADING.containsMatchIn(line) -> {
+                    flush()
+                    out += Block.Heading(trimmed.takeWhile { it == '#' }.length, trimmed.trimStart('#').trim())
+                }
+                RULE.matches(line) -> {
+                    flush()
+                    out += Block.Rule
+                }
+                QUOTE.containsMatchIn(line) -> {
+                    flush()
+                    val quoted = mutableListOf<String>()
+                    while (i < lines.size && QUOTE.containsMatchIn(lines[i])) quoted += QUOTE.replaceFirst(lines[i++], "")
+                    i--
+                    out += Block.Quote(quoted.joinToString("\n"))
+                }
+                trimmed.startsWith("|") && i + 1 < lines.size && TABLE_RULE.matches(lines[i + 1]) -> {
+                    flush()
+                    val rows = mutableListOf(cells(line))
+                    i += 2
+                    while (i < lines.size && lines[i].trimStart().startsWith("|")) rows += cells(lines[i++])
+                    i--
+                    out += Block.Table(rows)
+                }
+                BULLET.containsMatchIn(line) || ORDERED.containsMatchIn(line) -> {
+                    flush()
+                    val items = mutableListOf<Block.Item>()
+                    while (i < lines.size) {
+                        val current = lines[i]
+                        val bullet = BULLET.find(current)
+                        val ordered = ORDERED.find(current)
+                        when {
+                            bullet != null -> items += Block.Item(bullet.groupValues[1].length / 2, null, current.substring(bullet.range.last + 1))
+                            ordered != null -> items += Block.Item(ordered.groupValues[1].length / 2, ordered.groupValues[2] + ".", current.substring(ordered.range.last + 1))
+                            // An indented line continues the item above it.
+                            current.isNotBlank() && current.startsWith("  ") && items.isNotEmpty() ->
+                                items[items.lastIndex] = items.last().let { it.copy(text = it.text + "\n" + current.trim()) }
+                            else -> break
+                        }
+                        i++
+                    }
+                    i--
+                    out += Block.Items(items)
+                }
+                else -> paragraph.append(line).append('\n')
+            }
+            i++
+        }
+        flush()
+        return out
+    }
+
+    private fun cells(line: String): List<String> = line.trim().trim('|').split('|').map { it.trim() }
+
+    /** One line of text with its inline Markdown: bold, inline code and links. */
+    fun inlineText(text: String, caret: Boolean = false): AnnotatedString = buildAnnotatedString {
+        text.lines().forEachIndexed { index, line ->
+            if (index > 0) append('\n')
+            inline(line)
+        }
+        if (caret) withStyle(SpanStyle(brush = Brush.verticalGradient(listOf(Pearl[0], Pearl[1], Pearl[2])))) { append(" ▍") }
+    }
+
+    private val KEYWORDS = setOf(
+        "fun", "val", "var", "class", "object", "interface", "return", "if", "else", "when", "for", "while", "do", "in", "is", "as", "null", "true", "false",
+        "def", "import", "from", "pass", "None", "True", "False", "elif", "try", "except", "finally", "with", "lambda", "yield", "async", "await", "raise",
+        "function", "const", "let", "new", "this", "typeof", "export", "default", "extends", "implements", "static", "public", "private", "protected",
+        "void", "int", "string", "bool", "boolean", "float", "double", "struct", "enum", "type", "switch", "case", "break", "continue", "throw", "catch",
+        "package", "func", "go", "defer", "use", "pub", "fn", "impl", "mut", "match", "self", "then", "fi", "done", "echo", "export", "select", "where",
+    )
+    private val TOKEN = Regex("(#.*$|//.*$|--\\s.*$)|(\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`[^`]*`)|\\b(\\d+(?:\\.\\d+)?)\\b|\\b([A-Za-z_][A-Za-z0-9_]*)\\b", RegexOption.MULTILINE)
+
+    /** Code tinted the way an editor does it: comments, strings, numbers and common keywords. Language-blind on purpose. */
+    fun highlight(code: String, comment: SpanStyle, string: SpanStyle, number: SpanStyle, keyword: SpanStyle): AnnotatedString = buildAnnotatedString {
+        var cursor = 0
+        TOKEN.findAll(code).forEach { match ->
+            val style = when {
+                match.groups[1] != null -> comment
+                match.groups[2] != null -> string
+                match.groups[3] != null -> number
+                match.groups[4]?.value in KEYWORDS -> keyword
+                else -> null
+            } ?: return@forEach
+            append(code.substring(cursor, match.range.first))
+            withStyle(style) { append(match.value) }
+            cursor = match.range.last + 1
+        }
+        append(code.substring(cursor))
+    }
+
     /** A fenced block's language tag and body. */
     data class Code(val language: String, val text: String)
 
@@ -125,7 +257,7 @@ internal object AssistantMarkdown {
 
     private val BOLD = SpanStyle(fontWeight = FontWeight.Bold)
     private val QUOTED = SpanStyle(color = Rose.Muted)
-    private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, background = Rose.Soft)
+    private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Rose.ChipText, background = Rose.Soft)
     private val CODE_BLOCK = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, background = Rose.Soft)
     private val LINK = TextLinkStyles(SpanStyle(color = Rose.Deep, textDecoration = TextDecoration.Underline))
 }

@@ -24,6 +24,19 @@ data class CronJob(
 /** A skill, a toolset or an MCP server: something Hermes can use, and whether it is on. */
 data class Capability(val name: String, val detail: String?, val enabled: Boolean, val note: String? = null)
 
+/** Something the server can install: a catalog plugin or a catalog MCP server. */
+data class Installable(
+    val name: String,
+    val title: String,
+    val detail: String?,
+    /** Where it comes from, shown before installing: a repository or a command. */
+    val source: String?,
+    val installed: Boolean,
+    val plugin: Boolean,
+    /** Why this screen cannot install it (it needs keys or a sign-in); null when it can. */
+    val blocked: String? = null,
+)
+
 data class Listing<T>(val rows: List<T> = emptyList(), val loading: Boolean = false, val failed: Boolean = false)
 
 /** The Hermes server's own lists the menu shows, read over its HTTP API. Pure parsing; no Android. */
@@ -74,6 +87,38 @@ object HermesAdminProtocol {
         }
     }
 
+    /** `/api/dashboard/plugins/catalog`: the curated plugins, with what each one is granted. */
+    fun pluginCatalog(reply: Any?): List<Installable>? {
+        val rows = (reply as? JSONObject)?.optJSONArray("entries") ?: return null
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val name = text(row, "name") ?: return@mapNotNull null
+            Installable(name, text(row, "title") ?: name, (text(row, "capability_summary") ?: text(row, "description"))?.take(400),
+                text(row, "repo"), row.opt("installed") == true, plugin = true)
+        }
+    }
+
+    /** `/api/mcp/catalog`: one that needs keys or a sign-in is listed but left to the Webapp. */
+    fun mcpCatalog(reply: Any?): List<Installable>? {
+        val rows = (reply as? JSONObject)?.optJSONArray("entries") ?: return null
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val name = text(row, "name") ?: return@mapNotNull null
+            val env = row.optJSONArray("required_env")
+            val needsKeys = env != null && (0 until env.length()).any { env.optJSONObject(it)?.opt("required") != false }
+            val auth = text(row, "auth_type") ?: "none"
+            val blocked = when {
+                needsKeys -> "키 입력이 필요해요"
+                auth != "none" && auth != "env" -> "로그인이 필요해요"
+                else -> null
+            }
+            val args = row.optJSONArray("args")?.let { list -> (0 until list.length()).mapNotNull { list.opt(it) as? String } }.orEmpty()
+            Installable(name, name, text(row, "description")?.take(400),
+                text(row, "url") ?: text(row, "install_url") ?: text(row, "command")?.let { (listOf(it) + args).joinToString(" ").take(160) },
+                row.opt("installed") == true, plugin = false, blocked = blocked)
+        }
+    }
+
     private fun text(obj: JSONObject, name: String): String? = (obj.opt(name) as? String)?.takeIf { it.isNotBlank() }
 }
 
@@ -85,8 +130,49 @@ class HermesAdmin(context: Context) {
     val skills = MutableStateFlow(Listing<Capability>())
     val toolsets = MutableStateFlow(Listing<Capability>())
     val mcp = MutableStateFlow(Listing<Capability>())
+    val plugins = MutableStateFlow(Listing<Installable>())
+    val mcpCatalog = MutableStateFlow(Listing<Installable>())
+    /** The names being installed, so their buttons wait. */
+    val installing = MutableStateFlow(emptySet<String>())
     /** A short notice for the last action ("실행을 요청했어요"), shown once. */
     val notice = MutableStateFlow<String?>(null)
+
+    fun refreshCatalogs(profile: String?) {
+        read(plugins, "/api/dashboard/plugins/catalog", HermesAdminProtocol::pluginCatalog)
+        read(mcpCatalog, "/api/mcp/catalog" + scope(profile), HermesAdminProtocol::mcpCatalog)
+    }
+
+    /** Installs [item] on the server and switches it on. A plugin is code that runs on the Hermes machine. */
+    fun install(item: Installable, profile: String?) {
+        if (item.installed || item.blocked != null || item.name in installing.value) return
+        installing.value = installing.value + item.name
+        val (path, body) = if (item.plugin)
+            "/api/dashboard/agent-plugins/install" to JSONObject().put("identifier", "").put("catalog_name", item.name).put("enable", true)
+        else "/api/mcp/catalog/install" + scope(profile) to JSONObject().put("name", item.name).put("env", JSONObject()).put("enable", true)
+            .apply { if (profile != null) put("profile", profile) }
+        call("POST", path, body) { reply ->
+            installing.value = installing.value - item.name
+            val refused = (reply as? JSONObject)?.opt("ok") == false
+            notice.value = when {
+                reply == null -> "${item.title}: 설치하지 못했어요. Webapp에서 다시 해 보세요"
+                refused && (reply as JSONObject).opt("consent_required") == true -> "${item.title}: 권한 동의가 필요해요. Webapp에서 설치해 주세요"
+                refused -> "${item.title}: 설치가 거부됐어요"
+                else -> "${item.title}: 설치했어요"
+            }
+            refreshCatalogs(profile)
+        } ?: run {
+            installing.value = installing.value - item.name
+            notice.value = "서버가 설정되지 않았어요"
+        }
+    }
+
+    /** Deletes a chat on the server for good; [done] gets whether it is gone. */
+    fun deleteChat(row: ChatRow, done: (Boolean) -> Unit) {
+        val path = "/api/sessions/${java.net.URLEncoder.encode(row.id, "UTF-8")}" + scope(row.profile)
+        call("DELETE", path) { reply -> done(reply != null) } ?: done(false)
+    }
+
+    private fun scope(profile: String?) = profile?.let { "?profile=" + java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
 
     fun refreshCron() = read(cron, "/api/cron/jobs?profile=all", HermesAdminProtocol::cronJobs)
 
@@ -120,9 +206,9 @@ class HermesAdmin(context: Context) {
         } ?: run { target.value = target.value.copy(loading = false, failed = true) }
     }
 
-    private fun call(method: String, path: String, done: (Any?) -> Unit): SignInGate.Handle? {
+    private fun call(method: String, path: String, body: JSONObject? = null, done: (Any?) -> Unit): SignInGate.Handle? {
         val server = repository.getSettings("", "").serverUrl.takeIf { it.isNotBlank() } ?: return null
         val endpoint = MonitorEndpoint.from(server) ?: return null
-        return SignInGate.call(endpoint, method, path, null, server) { reply -> handler.post { done(reply) } }
+        return SignInGate.call(endpoint, method, path, body, server) { reply -> handler.post { done(reply) } }
     }
 }
