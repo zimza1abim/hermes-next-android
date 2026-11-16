@@ -38,10 +38,23 @@ data class ChatRow(
     /** The profile that owns it, and whether that is the default profile. */
     val profile: String? = null,
     val defaultProfile: Boolean = true,
+    val kind: ChatKind = ChatKind.CHAT,
+    /** A messaging thread's platform (`telegram`, `discord`, ...). */
+    val source: String? = null,
 )
 
+/** What a list row is: the bot's standing chat, a chat started in an app, a messaging thread, or a cron job's run. */
+enum class ChatKind { BOT, CHAT, MESSAGING, CRON }
+
 /** A bot: a Hermes profile the server serves. [own] is the server's launch profile, which calls reach without naming it. */
-data class ProfileRow(val name: String, val title: String, val own: Boolean = false, val hasAvatar: Boolean = true)
+data class ProfileRow(
+    val name: String,
+    val title: String,
+    val own: Boolean = false,
+    val hasAvatar: Boolean = true,
+    /** The bot's one standing chat ("Bot Chat"), which the server keeps out of the recent chats. */
+    val chat: ChatRow? = null,
+)
 
 enum class HistoryRole { USER, ASSISTANT }
 

@@ -163,8 +163,10 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        TabChip("일반", view.avatars[view.avatarKey(own ?: "default")], selected = view.tab == null) { chats.onTab(null) }
-        bots.forEach { bot -> TabChip(bot.title, view.avatars[view.avatarKey(bot.name)], selected = view.tab == bot.name) { chats.onTab(bot.name) } }
+        // The first tab is the main bot: the server's own profile, by the name its answers carry.
+        val main = state.profiles.firstOrNull { it.own }?.title
+        TabChip(main?.let { "@$it" } ?: "일반", view.avatars[view.avatarKey(own ?: "default")], selected = view.tab == null) { chats.onTab(null) }
+        bots.forEach { bot -> TabChip("@${bot.title}", view.avatars[view.avatarKey(bot.name)], selected = view.tab == bot.name) { chats.onTab(bot.name) } }
     }
     Row(
         Modifier.padding(horizontal = 20.dp).padding(top = 12.dp).fillMaxWidth().heightIn(min = 46.dp).clip(RoundedCornerShape(23.dp))
@@ -180,21 +182,51 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
     }
     Box(Modifier.padding(horizontal = 20.dp).padding(top = 10.dp)) { Banner(state.link, actions) }
     val needle = query.trim()
-    val rows = remember(view.chats, view.tab, own, needle) {
-        view.chats
+    val rows = remember(view.chats, view.tab, own, needle, state.profiles) {
+        // A bot's standing chat is not among the recent chats, so it heads its own tab.
+        val standing = state.profiles.firstOrNull { if (view.tab == null) it.own else it.name == view.tab }?.chat
+        (listOfNotNull(standing) + view.chats
             .filter { if (view.tab == null) general(it) else it.profile == view.tab }
+            .filter { it.id != standing?.id })
             .filter { needle.isEmpty() || it.title.orEmpty().contains(needle, true) || it.preview.orEmpty().contains(needle, true) }
-            .sortedByDescending { it.pinned }
     }
+    // Bot chat, app chats, each messaging platform and cron runs are separate sections, in that order.
+    val sections = remember(rows) {
+        val messaging = rows.filter { it.kind == ChatKind.MESSAGING }.groupBy { it.source ?: "messaging" }
+        listOf("봇 채팅" to rows.filter { it.kind == ChatKind.BOT }, "대화" to rows.filter { it.kind == ChatKind.CHAT }.sortedByDescending { it.pinned }) +
+            messaging.map { (source, threads) -> platformLabel(source) to threads } +
+            listOf("크론 작업" to rows.filter { it.kind == ChatKind.CRON })
+    }.filter { it.second.isNotEmpty() }
     when {
         rows.isEmpty() && view.loading -> Box(Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) { ThinkingIndicator() }
         rows.isEmpty() -> Box(Modifier.fillMaxSize().padding(top = 48.dp), contentAlignment = Alignment.TopCenter) {
             Text(if (needle.isEmpty()) "아직 대화가 없어요" else "찾는 대화가 없어요", style = RoseType.Label)
         }
         else -> LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 24.dp), modifier = Modifier.fillMaxSize()) {
-            items(rows, key = { "${it.profile}/${it.id}" }) { row -> ChatRowItem(row) { chats.onOpen(row) } }
+            sections.forEach { (title, chatRows) ->
+                item(key = "section-$title") {
+                    Row(Modifier.padding(start = 10.dp, top = 14.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, style = RoseType.Meta.copy(fontSize = 12.sp, color = Rose.ChipText))
+                        Text("  ${chatRows.size}", style = RoseType.Meta)
+                    }
+                }
+                items(chatRows, key = { "${it.kind}/${it.profile}/${it.id}" }) { row ->
+                    ChatRowItem(row, view.avatars[view.avatarKey(row.profile ?: own ?: "default")]) { chats.onOpen(row) }
+                }
+            }
         }
     }
+}
+
+/** A messaging source as its section title. */
+private fun platformLabel(source: String): String = when (source) {
+    "telegram" -> "텔레그램"
+    "discord" -> "디스코드"
+    "slack" -> "슬랙"
+    "whatsapp" -> "왓츠앱"
+    "email" -> "이메일"
+    "sms" -> "문자"
+    else -> source.replaceFirstChar { it.uppercase() }
 }
 
 @Composable
@@ -212,12 +244,13 @@ private fun TabChip(label: String, image: ImageBitmap?, selected: Boolean, onCli
 }
 
 @Composable
-private fun ChatRowItem(row: ChatRow, onClick: () -> Unit) {
+private fun ChatRowItem(row: ChatRow, image: ImageBitmap?, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PixelFlower(22.dp)
+        // The owning bot's picture; the Hermes icon when it has none.
+        BotAvatar(image, 40.dp)
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(row.title ?: "제목 없는 대화", style = RoseType.Body.copy(fontSize = 15.5.sp, fontWeight = FontWeight.Medium),

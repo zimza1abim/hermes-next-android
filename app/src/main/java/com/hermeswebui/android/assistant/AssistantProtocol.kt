@@ -105,7 +105,7 @@ object AssistantProtocol {
         call(id, "session.interrupt", profile, JSONObject().put("session_id", sessionId))
 
     /** The bots: this server's own profile first, then every profile it serves. */
-    fun listProfiles(id: Int): String = call(id, "profiles.list", JSONObject().put("include_sessions", false))
+    fun listProfiles(id: Int): String = call(id, "profiles.list", JSONObject().put("include_sessions", true))
 
     fun avatar(id: Int, profile: String): String =
         call(id, "profiles.get_asset", JSONObject().put("asset", "avatar").put("name", profile))
@@ -223,7 +223,14 @@ object AssistantProtocol {
         val name = text(row, "name") ?: return@mapNotNull null
         // The name the Bots tab shows, else the profile's display name, else its id.
         val title = row.optJSONObject("ui_meta")?.optJSONObject("hermes-bots")?.let { text(it, "title") } ?: text(row, "display_name")
-        ProfileRow(name, title ?: name, own = index == 0, hasAvatar = row.opt("has_avatar") != false)
+        val standing = row.optJSONObject("canonical_session")?.let { chat ->
+            text(chat, "id")?.let { id ->
+                ChatRow(id, title ?: name, text(chat, "preview")?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
+                    (chat.opt("last_active") as? Number)?.toDouble()?.takeIf { it > 0 }, pinned = true, profile = name, defaultProfile = index == 0,
+                    kind = ChatKind.BOT)
+            }
+        }
+        ProfileRow(name, title ?: name, own = index == 0, hasAvatar = row.opt("has_avatar") != false, chat = standing)
     }.distinctBy { it.name }
 
     /**
@@ -231,24 +238,43 @@ object AssistantProtocol {
      * (`/api/profiles/sessions/sidebar`): the same list on every client, whichever chats are open.
      */
     fun sidebar(reply: JSONObject): List<ChatRow>? {
-        val rows = reply.optJSONObject("recents")?.optJSONArray("sessions") ?: return null
-        return (0 until rows.length()).mapNotNull { index ->
-            val row = rows.optJSONObject(index) ?: return@mapNotNull null
-            val id = text(row, "id") ?: return@mapNotNull null
-            ChatRow(
-                id = id,
-                title = text(row, "title"),
-                preview = text(row, "preview")?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
-                lastActiveAt = ((row.opt("last_active") ?: row.opt("started_at")) as? Number)?.toDouble(),
-                running = row.opt("is_active") == true,
-                pinned = row.opt("pinned") == true,
-                profile = text(row, "profile"),
-                defaultProfile = row.opt("is_default_profile") != false,
-            )
-        }.distinctBy { it.profile to it.id }
+        if (reply.optJSONObject("recents")?.optJSONArray("sessions") == null) return null
+        fun slice(name: String, kind: ChatKind): List<ChatRow> {
+            val rows = reply.optJSONObject(name)?.optJSONArray("sessions") ?: return emptyList()
+            return (0 until rows.length()).mapNotNull { index ->
+                val row = rows.optJSONObject(index) ?: return@mapNotNull null
+                val id = text(row, "id") ?: return@mapNotNull null
+                ChatRow(
+                    id = id,
+                    title = text(row, "title"),
+                    preview = text(row, "preview")?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
+                    lastActiveAt = ((row.opt("last_active") ?: row.opt("started_at")) as? Number)?.toDouble(),
+                    running = row.opt("is_active") == true,
+                    pinned = row.opt("pinned") == true,
+                    profile = text(row, "profile"),
+                    defaultProfile = row.opt("is_default_profile") != false,
+                    kind = kind,
+                    source = text(row, "source").takeIf { kind == ChatKind.MESSAGING },
+                )
+            }
+        }
+        return (slice("recents", ChatKind.CHAT) + slice("messaging", ChatKind.MESSAGING) + slice("cron", ChatKind.CRON))
+            .distinctBy { it.profile to it.id }
     }
 
-    const val SIDEBAR_PATH = "/api/profiles/sessions/sidebar?recents_profile=all&recents_limit=200&cron_limit=1&messaging_limit=1"
+    /**
+     * What the Webapp leaves out of its own chat list (`SIDEBAR_EXCLUDED_SOURCES`): editor, cron, kanban,
+     * one-shot, subagent and tool runs, and every messaging platform's threads. They are not chats to reopen.
+     */
+    private val NOT_CHATS = listOf("acp", "cron", "kanban", "oneshot", "subagent", "tool", "telegram", "discord", "slack", "mattermost",
+        "matrix", "signal", "whatsapp", "bluebubbles", "photon", "homeassistant", "email", "sms", "webhook", "api_server", "weixin",
+        "wecom", "qqbot", "yuanbao", "dingtalk", "feishu")
+
+    /** The messaging slice is everything but cron runs and chats started in an app. */
+    private val NOT_MESSAGING = listOf("cron", "acp", "cli", "codex", "desktop", "gateway", "kanban", "local", "oneshot", "tui")
+
+    val SIDEBAR_PATH = "/api/profiles/sessions/sidebar?recents_profile=all&recents_limit=200&cron_limit=50&messaging_limit=100" +
+        "&recents_exclude=" + NOT_CHATS.joinToString(",") + "&messaging_exclude=" + NOT_MESSAGING.joinToString(",")
 
     /** The display rows the server projects from a stored transcript; rows with nothing to show are skipped. */
     /** The user's and the bot's own words of a stored transcript; tool rows and empty rows are left out. */

@@ -116,10 +116,14 @@ class AssistantProtocolTest {
     fun `the sidebar feed becomes chat rows, a transcript reply history rows, and the roster bots`() {
         val list = AssistantProtocol.sidebar(JSONObject("""{"recents":{"sessions":[
             {"id":"a","title":"Trip","preview":"**first** `line`","last_active":1700000000.5,"pinned":true,"profile":"default","is_default_profile":true,"is_active":false},
-            {"id":"b","title":"","started_at":12,"is_active":true,"profile":"patch-pilot","is_default_profile":false},{"title":"no id"}]},"cron":{}}"""))
+            {"id":"b","title":"","started_at":12,"is_active":true,"profile":"patch-pilot","is_default_profile":false},{"title":"no id"}]},
+            "messaging":{"sessions":[{"id":"t","title":"@me","source":"telegram","profile":"default"}]},
+            "cron":{"sessions":[{"id":"c","title":"daily","source":"cron","profile":"usage-watch","is_default_profile":false}]}}"""))
         assertThat(list).containsExactly(
             ChatRow("a", "Trip", "first line", 1700000000.5, pinned = true, profile = "default"),
             ChatRow("b", null, null, 12.0, running = true, profile = "patch-pilot", defaultProfile = false),
+            ChatRow("t", "@me", null, null, profile = "default", kind = ChatKind.MESSAGING, source = "telegram"),
+            ChatRow("c", "daily", null, null, profile = "usage-watch", defaultProfile = false, kind = ChatKind.CRON),
         ).inOrder()
         assertThat(AssistantProtocol.sidebar(JSONObject("{}"))).isNull()
 
