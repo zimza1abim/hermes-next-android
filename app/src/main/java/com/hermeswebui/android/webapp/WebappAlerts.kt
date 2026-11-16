@@ -122,7 +122,18 @@ data class WebappState(
     val monitor: MonitorState = MonitorState(),
     /** The session an alert tap asked to open, held until the app is visible. */
     val focus: String? = null,
+    /**
+     * A stored chat the assistant panel asked the app to open, held until the app is visible. Unlike
+     * [focus] it does not depend on a gateway document having announced itself: the shell keeps trying
+     * until the page takes it, so it also works when the app had to start first.
+     */
+    val open: String? = null,
+    /** Runtime or stored ids of the chat an open assistant panel shows; its alerts stay out of the tray. */
+    val shownElsewhere: Set<String> = emptySet(),
 ) {
+    fun isShownElsewhere(sessionId: String): Boolean =
+        sessionId in shownElsewhere || sessions[sessionId]?.storedId?.let { it in shownElsewhere } == true
+
     companion object {
         const val MAX_SESSIONS = 256
         const val MAX_RECENT = 64
@@ -198,8 +209,12 @@ sealed interface WebappInput {
     data class SettingsChanged(val settings: WebappBackgroundSettings) : WebappInput
     /** An alert tap brought the app forward and names the session to open. */
     data class FocusRequested(val sessionId: String) : WebappInput
+    /** The assistant panel asks the app to show this stored chat. */
+    data class OpenRequested(val storedId: String) : WebappInput
     /** Whether the shell remembers a Webapp document on the current server. */
     data class KnownWebapp(val known: Boolean) : WebappInput
+    /** The chat ids an open assistant panel shows; empty once it closes. */
+    data class ShownElsewhere(val ids: Set<String>) : WebappInput
     data object DocumentGone : WebappInput
     data object ServerChanged : WebappInput
     /** A different network became the default while keep-alive runs. */
@@ -229,6 +244,8 @@ sealed interface WebappEffect {
     data class KeepAlive(val on: Boolean) : WebappEffect
     /** Ask the live document to open a session; emitted only while visible. */
     data class FocusSession(val sessionId: String) : WebappEffect
+    /** Navigate the page to this stored chat; the shell retries until the page is ready for it. */
+    data class OpenChat(val storedId: String) : WebappEffect
     data object QuietWatchFallback : WebappEffect
     /** The background monitor stopped because the gateway keeps refusing the sign-in. */
     data object SignInNeeded : WebappEffect
@@ -285,8 +302,9 @@ object WebappAlertReducer {
             allowRotation = applied.prompts.values.none { it.sending })
         val stopped = monitor.phase == MonitorPhase.Idle && applied.monitor.phase != MonitorPhase.Idle
         val reconciled = applied.copy(monitor = monitor).let { if (stopped) it.dropRoutes { route -> route == PromptRoute.Monitor } else it }
-        val (next, focus) = deliverFocus(reconciled)
-        return next to (actions + diffPrompts(state, next) + keepAliveChange(state, next) + monitorEffects + focus)
+        val (focused, focus) = deliverFocus(reconciled)
+        val (next, open) = deliverOpen(focused)
+        return next to (actions + diffPrompts(state, next) + keepAliveChange(state, next) + monitorEffects + focus + open)
     }
 
     fun keepAlive(state: WebappState): Boolean =
@@ -314,7 +332,7 @@ object WebappAlertReducer {
     fun promptAlerts(state: WebappState): Map<Pair<GatewayAlertKind, String>, Alert> {
         if (state.visible) return emptyMap()
         return state.prompts.values
-            .filter { prompt -> state.settings.isEnabled(prompt.kind) }
+            .filter { prompt -> state.settings.isEnabled(prompt.kind) && !state.isShownElsewhere(prompt.request.sessionId) }
             .map { promptAlert(state, it) }
             .associateBy { it.kind to it.key }
     }
@@ -324,10 +342,12 @@ object WebappAlertReducer {
             is WebappInput.Visibility -> state.copy(visible = input.visible).alone()
             is WebappInput.SettingsChanged -> state.copy(settings = input.settings).alone()
             is WebappInput.FocusRequested -> state.copy(focus = input.sessionId).alone()
+            is WebappInput.OpenRequested -> state.copy(open = input.storedId).alone()
             is WebappInput.KnownWebapp -> state.copy(known = input.known).alone()
+            is WebappInput.ShownElsewhere -> state.copy(shownElsewhere = input.ids).alone()
             WebappInput.DocumentGone -> state.copy(doc = null, focus = null,
                 webappActive = !state.visible && state.webappActive).dropRoutes { it is PromptRoute.Page }.alone()
-            WebappInput.ServerChanged -> state.copy(doc = null, focus = null, webappActive = false, known = false,
+            WebappInput.ServerChanged -> state.copy(doc = null, focus = null, open = null, webappActive = false, known = false,
                 sessions = emptyMap(), pageSession = null, seen = emptyList(), settled = emptyList(),
                 oneShots = emptyMap(), prompts = emptyMap()).alone()
             is WebappInput.Hello ->
@@ -505,7 +525,7 @@ object WebappAlertReducer {
                 Triple(GatewayAlertKind.BACKGROUND_COMPLETE, AlertReason.BACKGROUND, event.text)
             else -> return null
         }
-        if (state.visible || !state.settings.isEnabled(kind)) return null
+        if (state.visible || !state.settings.isEnabled(kind) || state.isShownElsewhere(event.sessionId)) return null
         return alert(state, kind, event.sessionId, event.sessionId, reason, detail, actions = null)
     }
 
@@ -569,6 +589,13 @@ object WebappAlertReducer {
         // The page opens chats by stored id and may not know a runtime id the monitor attached.
         val target = state.sessions[sessionId]?.storedId ?: sessionId
         return cleared to listOfNotNull(WebappEffect.FocusSession(target).takeIf { state.doc != null })
+    }
+
+    /** Hands the assistant's chat to the shell once the app is visible. */
+    private fun deliverOpen(state: WebappState): Pair<WebappState, List<WebappEffect>> {
+        val storedId = state.open ?: return state to emptyList()
+        if (!state.visible) return state to emptyList()
+        return state.copy(open = null) to listOf(WebappEffect.OpenChat(storedId))
     }
 
     private fun keepAliveChange(before: WebappState, after: WebappState): List<WebappEffect> {

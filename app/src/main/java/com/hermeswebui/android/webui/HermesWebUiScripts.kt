@@ -1829,6 +1829,29 @@ object HermesWebUiScripts {
     }
 
     /** Asks the notification facade to open [sessionId] through the page's own kept notification. */
+    /**
+     * Shows the stored chat [storedId] in the official Webapp, which routes chats by hash (`#/<id>`).
+     * The body of an origin-guarded script. It returns "set" when it changed the route, "same" when
+     * the page was already there, and false while the Webapp document is not there yet. Setting the
+     * hash navigates in place: no reload, so the page's live gateway socket stays.
+     */
+    fun buildWebappOpenChatScript(storedId: String): String {
+        val quotedId = JSONObject.quote(storedId)
+        return """
+            if (window.__HERMES_UI_SURFACE__ !== 'webapp') return false;
+            // The Webapp closes its narrow-screen menu only when a chat is picked inside it.
+            try {
+              window.dispatchEvent(new CustomEvent('hermes:pane-toggle-reveal', {
+                detail: { id: 'chat-sidebar', mode: 'close' }
+              }));
+            } catch (_) {}
+            var target = '#/' + encodeURIComponent($quotedId);
+            if (window.location.hash === target) return 'same';
+            window.location.hash = target;
+            return 'set';
+        """.trimIndent()
+    }
+
     fun buildWebappFocusSessionScript(sessionId: String): String {
         val quotedSessionId = JSONObject.quote(sessionId)
         return """

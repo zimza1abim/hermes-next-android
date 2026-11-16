@@ -5,22 +5,18 @@ import android.os.SystemClock
 import android.webkit.CookieManager
 import android.content.Context
 import java.security.MessageDigest
-import java.io.IOException
 import java.net.URI
-import java.util.concurrent.TimeUnit
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
-import org.json.JSONTokener
 
 /** The configured server's gateway endpoints, under its base path. */
 data class MonitorEndpoint(val origin: String, val ticketUrl: String, val socketUrl: String) {
+    /** The machine's shared UI preferences, next to the ticket endpoint under the same base path. */
+    val preferencesUrl: String get() = ticketUrl.substringBefore("/api/webapp/") + "/api/ui-preferences"
+
     companion object {
         fun from(serverUrl: String): MonitorEndpoint? {
             val uri = runCatching { URI(serverUrl.trim()) }.getOrNull() ?: return null
@@ -48,16 +44,14 @@ internal class GatewayMonitorLink(
     private val handler: Handler,
     private val deliver: (WebappInput) -> Unit,
 ) {
-    private val base = OkHttpClient.Builder().connectTimeout(CONNECT_TIMEOUT_S, TimeUnit.SECONDS).build()
-    private val http = base.newBuilder().callTimeout(MINT_TIMEOUT_S, TimeUnit.SECONDS).build()
-    private val sockets = base.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(PING_INTERVAL_S, TimeUnit.SECONDS).build()
+    private val sockets = SignInGate.socketClient(PING_INTERVAL_S)
 
     private var gen = -1
     private var endpoint: MonitorEndpoint? = null
+    private var cookieUrl: String? = null
     private var cookie: String? = null
-    private var mintCall: Call? = null
-    private var refreshCall: Call? = null
+    private var mintCall: SignInGate.Handle? = null
+    private var refreshCall: SignInGate.Handle? = null
     private var refreshedAt = 0L
     private var socket: WebSocket? = null
     private val preferences = context.getSharedPreferences("hermes_monitor_cursors", Context.MODE_PRIVATE)
@@ -104,41 +98,19 @@ internal class GatewayMonitorLink(
             loadCursors()
         }
         this.cookie = cookie
-        if (target == null) {
+        cookieUrl = serverUrl
+        if (target == null || serverUrl == null) {
             post(WebappInput.TicketMinted(gen, null))
             return
         }
         refreshedAt = SystemClock.elapsedRealtime()
-        mintCall = http.newCall(ticketRequest(target, cookie)).also { call ->
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = post(WebappInput.TicketMinted(gen, null))
-
-                override fun onResponse(call: Call, response: Response) {
-                    keepCookies(response)
-                    if (response.code == 401 || response.code == 403) {
-                        response.close()
-                        return post(WebappInput.TicketMinted(gen, null, signedOut = true))
-                    }
-                    val ticket = response.use { reply ->
-                        if (!reply.isSuccessful) null else runCatching {
-                            (JSONTokener(reply.body?.string().orEmpty()).nextValue() as? JSONObject)
-                                ?.optString("ticket")?.trim()?.takeIf { it.isNotEmpty() }
-                        }.getOrNull()
-                    }
-                    post(WebappInput.TicketMinted(gen, ticket))
-                }
-            })
+        mintCall = SignInGate.mint(target, serverUrl, cookie) { result ->
+            handler.post {
+                result.cookie?.let { this.cookie = it }
+                deliver(WebappInput.TicketMinted(gen, result.ticket, signedOut = result.signedOut))
+            }
         }
     }
-
-    private fun ticketRequest(target: MonitorEndpoint, cookie: String?): Request =
-        Request.Builder()
-            .url(target.ticketUrl)
-            .post(ByteArray(0).toRequestBody())
-            .header("Origin", target.origin)
-            .header("Accept", "application/json")
-            .apply { if (!cookie.isNullOrBlank()) header("Cookie", cookie) }
-            .build()
 
     /**
      * A socket that stays up for a day makes no request, and the sign-in's refresh token expires after
@@ -147,16 +119,12 @@ internal class GatewayMonitorLink(
      */
     private fun refreshSignInIfDue() {
         val target = endpoint ?: return
+        val url = cookieUrl ?: return
         val now = SystemClock.elapsedRealtime()
         if (now - refreshedAt < SIGN_IN_REFRESH_MS) return
         refreshedAt = now
-        val current = runCatching { CookieManager.getInstance().getCookie(target.origin) }.getOrNull() ?: cookie
-        refreshCall = http.newCall(ticketRequest(target, current)).also { call ->
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = Unit
-
-                override fun onResponse(call: Call, response: Response) = response.use { keepCookies(it) }
-            })
+        refreshCall = SignInGate.mint(target, url, cookie) { result ->
+            result.cookie?.let { fresh -> handler.post { cookie = fresh } }
         }
     }
 
@@ -453,8 +421,6 @@ internal class GatewayMonitorLink(
         private const val PROTOCOL = "hermes-gateway-v1"
         private const val TICKET_PROTOCOL_PREFIX = "hermes-gateway-ticket."
         private const val NORMAL_CLOSURE = 1000
-        private const val CONNECT_TIMEOUT_S = 10L
-        private const val MINT_TIMEOUT_S = 15L
         private const val ACTIVE_POLL_MS = 10_000L
         private const val RESPONSE_TIMEOUT_MS = 30_000L
         private const val PING_INTERVAL_S = 15L

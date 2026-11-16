@@ -100,6 +100,34 @@ class WebappAlertReducerTest {
     }
 
     @Test
+    fun `the chat an assistant panel shows stays out of the tray until the panel closes`() {
+        val shown = WebappInput.ShownElsewhere(setOf("s1"))
+        assertThat(effectsOf(*hidden, shown, Inbound(doc, 1, completed))).isEmpty()
+        assertThat(effectsOf(*hidden, shown, Inbound(doc, 1, approval))).isEmpty()
+        // An approval still open when the panel closes reaches the tray then.
+        assertThat(effectsOf(*hidden, shown, Inbound(doc, 1, approval), WebappInput.ShownElsewhere(emptySet())).single())
+            .isInstanceOf(Post::class.java)
+        // Matched by stored id too: the monitor's events carry its own runtime id.
+        val info = GatewayEvent.SessionInfo("s1", storedId = "stored-1", running = true, title = null)
+        assertThat(effectsOf(*hidden, Inbound(doc, 1, info), WebappInput.ShownElsewhere(setOf("stored-1")), Inbound(doc, 1, completed))).isEmpty()
+        assertThat(effectsOf(*hidden, WebappInput.ShownElsewhere(setOf("other")), Inbound(doc, 1, completed)).single())
+            .isInstanceOf(Post::class.java)
+    }
+
+    @Test
+    fun `a chat handed over by the assistant opens once the app is visible, with or without a live document`() {
+        val open = WebappInput.OpenRequested("stored-1")
+        val asked = WebappEffect.OpenChat("stored-1")
+        // The app is on screen: at once, even before any gateway document has announced itself.
+        assertThat(effectsOf(open)).containsExactly(asked)
+        assertThat(effectsOf(Hello(doc), open)).containsExactly(asked)
+        // Hidden: only when the app is shown, and only once.
+        assertThat(effectsOf(*hidden, open)).isEmpty()
+        assertThat(effectsOf(*hidden, open, Visibility(true)).filterIsInstance<WebappEffect.OpenChat>()).containsExactly(asked)
+        assertThat(effectsOf(*hidden, open, Visibility(true), Visibility(false), Visibility(true)).filterIsInstance<WebappEffect.OpenChat>()).isEmpty()
+    }
+
+    @Test
     fun `failed and interrupted turns and background tasks use their own kinds`() {
         val failed = GatewayEvent.TurnEnded("s1", TurnOutcome.ERROR, "partial", "boom")
         val stopped = GatewayEvent.TurnEnded("s1", TurnOutcome.INTERRUPTED, null, null)

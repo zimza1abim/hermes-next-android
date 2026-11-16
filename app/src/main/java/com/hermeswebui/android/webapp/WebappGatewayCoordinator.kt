@@ -104,6 +104,7 @@ class WebappGatewayCoordinator private constructor(
     private val pageAnswerTimeouts = mutableMapOf<RpcId, Runnable>()
 
     private val handler = Handler(Looper.getMainLooper())
+    private var openRetry: Runnable? = null
     private var keepAliveRunning = false
     private var stopPending = false
     private val deferredStop = Runnable { stopKeepAliveService() }
@@ -181,6 +182,11 @@ class WebappGatewayCoordinator private constructor(
         } else dispatch(WebappInput.DocumentGone)
     }
 
+    /** The assistant panel shows these chats (runtime and stored ids); empty when it closes. */
+    fun setShownElsewhere(ids: Set<String>) {
+        if (ids != state.shownElsewhere) dispatch(WebappInput.ShownElsewhere(ids))
+    }
+
     fun updateSettings(settings: WebappBackgroundSettings) {
         if (settings != state.settings) dispatch(WebappInput.SettingsChanged(settings))
     }
@@ -194,6 +200,9 @@ class WebappGatewayCoordinator private constructor(
         intent.getStringExtra(HermesKeepAliveService.EXTRA_SESSION_ID)
             ?.takeIf { it.isNotBlank() && it.length <= MAX_SESSION_ID }
             ?.let { dispatch(WebappInput.FocusRequested(it)) }
+        intent.getStringExtra(HermesKeepAliveService.EXTRA_OPEN_STORED_ID)
+            ?.takeIf { it.isNotBlank() && it.length <= MAX_SESSION_ID }
+            ?.let { dispatch(WebappInput.OpenRequested(it)) }
         return true
     }
 
@@ -308,6 +317,36 @@ class WebappGatewayCoordinator private constructor(
             is WebappEffect.MonitorRetryAfter -> monitor.retryAfter(effect.gen, effect.delayMs)
             // Posted so it runs after the activity resumes and the WebView is shown again.
             is WebappEffect.FocusSession -> handler.post { focusSession(effect.sessionId) }
+            is WebappEffect.OpenChat -> handler.post { openChat(effect.storedId, attempt = 0) }
+        }
+    }
+
+    /**
+     * Shows a stored chat by setting the Webapp's hash route, in place and without a reload. The page may
+     * still be loading (the app was just started for this), and a booting Webapp restores the chat it
+     * remembers over the route. So it is tried until the Webapp document is there, then checked once a
+     * second and set again until the route has stayed put for [OPEN_STABLE_CHECKS] checks in a row.
+     */
+    private fun openChat(storedId: String, attempt: Int, stable: Int = 0) {
+        openRetry?.let(handler::removeCallbacks)
+        openRetry = null
+        fun again(delayMs: Long, stableNow: Int) {
+            if (attempt >= OPEN_ATTEMPTS) return
+            val retry = Runnable { openChat(storedId, attempt + 1, stableNow) }
+            openRetry = retry
+            handler.postDelayed(retry, delayMs)
+        }
+        val view = webView
+        val origin = trustedPageOrigin()
+        if (view == null || origin == null) return again(OPEN_RETRY_MS, 0)
+        view.evaluateJavascript(
+            HermesWebUiScripts.buildOriginGuardedRuntimeScript(origin, HermesWebUiScripts.buildWebappOpenChatScript(storedId))
+        ) { result ->
+            when (result) {
+                "\"same\"" -> if (stable + 1 < OPEN_STABLE_CHECKS) again(OPEN_CONFIRM_MS, stable + 1)
+                "\"set\"" -> again(OPEN_CONFIRM_MS, 0)
+                else -> again(OPEN_RETRY_MS, 0)
+            }
         }
     }
 
@@ -646,6 +685,11 @@ class WebappGatewayCoordinator private constructor(
         }
 
         const val STOPPED_WARNING_ID = 20_024
+        /** A chat handed over by the assistant: up to 60 tries, half a second apart until the page is there. */
+        private const val OPEN_ATTEMPTS = 60
+        private const val OPEN_RETRY_MS = 500L
+        private const val OPEN_CONFIRM_MS = 1_000L
+        private const val OPEN_STABLE_CHECKS = 4
         private const val KNOWN_PREFIX = "known:"
 
         const val ACTION_ANSWER = "com.hermeswebui.android.action.WEBAPP_ANSWER"

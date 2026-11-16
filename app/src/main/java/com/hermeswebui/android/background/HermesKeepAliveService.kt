@@ -78,6 +78,8 @@ class HermesKeepAliveService : Service() {
         const val NOTIFICATION_ID = 20_021
         const val ACTION_OPEN_APP = "com.hermeswebui.android.action.OPEN_WEBAPP"
         const val EXTRA_SESSION_ID = "com.hermeswebui.android.extra.WEBAPP_SESSION_ID"
+        /** The stored id of a chat the assistant panel hands over; it waits for the page if the app had to start. */
+        const val EXTRA_OPEN_STORED_ID = "com.hermeswebui.android.extra.WEBAPP_OPEN_STORED_ID"
         private const val TAG = "HermesKeepAliveService"
 
         fun ensureChannel(context: Context) {

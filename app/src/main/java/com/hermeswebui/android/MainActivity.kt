@@ -493,6 +493,8 @@ class MainActivity : ComponentActivity() {
         if (!appUpdateCoordinator.handleIntent(intent)) {
             handleShareIntent(intent)
         }
+        // A cold start from the assistant panel names the chat to show once the page is up.
+        if (savedInstanceState == null) webappGateway.handleIntent(intent)
 
         setContent {
             AppContent(

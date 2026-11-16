@@ -82,6 +82,38 @@
 
         </activity>
 
+        <!-- The assistant panel: an exported activity of the main app, with no launcher icon of its own.
+             Tasker and activity pickers start it directly; Modes and Routines use the app's shortcuts.
+             Its own task, so closing it returns to the app it was opened over. Not BROWSABLE: a web link
+             cannot open it, and other apps only fill the field. -->
+        <activity
+            android:name=".assistant.AssistantActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/assistant_label"
+            android:launchMode="singleTask"
+            android:taskAffinity="${applicationId}.assistant"
+            android:theme="@style/Theme.HermesAssistant"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="hermes" android:host="assistant" />
+            </intent-filter>
+
+            <intent-filter android:label="@string/assistant_translate_label">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <activity-alias
             android:name=".WebUiLauncher"
             android:enabled="false"

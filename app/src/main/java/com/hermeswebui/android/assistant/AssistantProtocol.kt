@@ -1,0 +1,188 @@
+package com.hermeswebui.android.assistant
+
+import com.hermeswebui.android.webapp.Decision
+import com.hermeswebui.android.webapp.GatewayEvent
+import com.hermeswebui.android.webapp.GatewayProtocol
+import com.hermeswebui.android.webapp.RpcId
+import com.hermeswebui.android.webapp.TurnOutcome
+import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONTokener
+
+/** One frame of the assistant's own gateway socket, reduced to what the panel shows. */
+sealed interface AssistantFrame {
+    /** `gateway.ready`; [authority] is the canonical session-authority contract. */
+    data class Ready(val authority: Boolean) : AssistantFrame
+
+    /** The answer to one of the panel's calls. Fields the reply does not carry are null. */
+    data class Reply(
+        val id: Int,
+        val errorCode: Int? = null,
+        val errorMessage: String? = null,
+        val sessionId: String? = null,
+        val storedId: String? = null,
+        val running: Boolean? = null,
+        /** The newest assistant text of a transcript reply, and the user text it answered. */
+        val lastAnswer: String? = null,
+        val lastQuestion: String? = null,
+        /** An image upload's answer: whether it was attached, its server path and type. */
+        val attached: Boolean? = null,
+        val path: String? = null,
+        val mime: String? = null,
+    ) : AssistantFrame {
+        val ok: Boolean get() = errorCode == null && errorMessage == null
+    }
+
+    data class Started(val sessionId: String) : AssistantFrame
+
+    /**
+     * A reply chunk. [segment] and [offset] (UTF-16 units of the segment already sent) let a chunk the
+     * server sends again be dropped.
+     */
+    data class Delta(val sessionId: String, val text: String, val segment: Int?, val offset: Int?) : AssistantFrame
+
+    data class Completed(val sessionId: String, val outcome: TurnOutcome, val text: String?, val error: String?) : AssistantFrame
+
+    data class Request(val request: GatewayEvent.PromptRequest) : AssistantFrame
+
+    /** The server withdrew requests: one id, or every approval with [requestIds] (empty is all of them). */
+    data class Withdrawn(val sessionId: String, val rpcId: RpcId?, val requestIds: Set<String>?) : AssistantFrame
+
+    /** A request only a window showing the session can answer; the panel declines it. */
+    data class WindowRequest(val rpcId: RpcId) : AssistantFrame
+}
+
+/**
+ * The gateway calls the panel makes (hermes-agent `apps/shared/src/gateway-contract.generated.ts`).
+ * Canonical servers (`session_authority`) and legacy `hermes serve` take slightly different params.
+ */
+object AssistantProtocol {
+    /** A pre-admission refusal of an unknown param (4000) or a capability (4094): safe to resend without it. */
+    val PRE_ADMISSION_CODES = setOf(4000, 4094)
+    private val WINDOW_OWNED = setOf("preview.read", "preview.act", "terminal.read", "window.read", "tour")
+
+    fun capabilities(id: Int): String = call(id, "client.capabilities", JSONObject().put("server_requests", true))
+
+    /** [model] pins this chat's model only; Hermes's own setting is left as it is. */
+    fun create(id: Int, authority: Boolean, requestId: String, model: AssistantModel? = null): String =
+        call(id, "session.create", JSONObject().apply {
+            if (authority) put("request_id", requestId)
+            if (model != null) put("model", model.model).put("provider", model.provider)
+        })
+
+    /**
+     * Canonical servers take uploaded photos as `attachments` (path and type). A legacy server keeps
+     * them queued on the session from `image.attach_bytes` and its replies carry no type, so none are named.
+     */
+    fun submit(id: Int, sessionId: String, text: String, submissionId: String?, images: List<ImageAttachment> = emptyList()): String {
+        val attachments = images.filter { it.path != null && it.mime != null }
+        return call(id, "prompt.submit", JSONObject().put("session_id", sessionId).put("text", text).apply {
+            if (submissionId != null) put("submission_id", submissionId)
+            if (attachments.isNotEmpty()) put("attachments", JSONArray(attachments.map { JSONObject().put("path", it.path).put("mime", it.mime) }))
+        })
+    }
+
+    fun attachImage(id: Int, sessionId: String, base64: String, filename: String): String =
+        call(id, "image.attach_bytes", JSONObject().put("session_id", sessionId).put("content_base64", base64).put("filename", filename))
+
+    /** Reattaches to [storedId] after a reconnect; the transcript tells how a turn ended while away. */
+    fun resume(id: Int, authority: Boolean, storedId: String): String =
+        call(id, "session.resume", JSONObject().put("session_id", storedId)
+            .apply { if (!authority) put("inline_images", false) })
+
+    fun interrupt(id: Int, sessionId: String): String = call(id, "session.interrupt", JSONObject().put("session_id", sessionId))
+
+    fun approval(request: GatewayEvent.ApprovalRequested, allow: Boolean): String? =
+        GatewayProtocol.choiceFor(if (allow) Decision.ALLOW else Decision.DENY, request.choices)
+            ?.let { GatewayProtocol.encodeApprovalAnswer(request.rpcId, it) }
+
+    fun notShown(rpcId: RpcId): String = GatewayProtocol.encodeNotShown(rpcId)
+
+    fun ping(id: String): String = GatewayProtocol.encodePing(id)
+
+    private fun call(id: Int, method: String, params: JSONObject): String =
+        JSONObject().put("jsonrpc", "2.0").put("id", id).put("method", method).put("params", params).toString()
+
+    fun parse(raw: String): AssistantFrame? {
+        val frame = runCatching { JSONTokener(raw).nextValue() as? JSONObject }.getOrNull() ?: return null
+        val method = frame.opt("method") as? String
+        if (method == null) return parseReply(frame)
+        if (method in WINDOW_OWNED) return RpcId.of(frame.opt("id"))?.let(AssistantFrame::WindowRequest)
+        val params = frame.optJSONObject("params")
+        if (method == "event" && params != null) {
+            val payload = params.optJSONObject("payload") ?: JSONObject()
+            val sessionId = text(params, "session_id") ?: text(payload, "session_id")
+            when (text(params, "type")) {
+                "gateway.ready" -> return AssistantFrame.Ready(payload.opt("session_authority") == true)
+                "message.start" -> return sessionId?.let(AssistantFrame::Started)
+                "message.delta" -> {
+                    val chunk = payload.opt("text") as? String
+                    if (sessionId == null || chunk.isNullOrEmpty()) return null
+                    return AssistantFrame.Delta(sessionId, chunk, int(payload, "segment"), int(payload, "offset"))
+                }
+            }
+        }
+        return when (val event = GatewayProtocol.parseInbound(raw)) {
+            is GatewayEvent.TurnEnded -> AssistantFrame.Completed(event.sessionId, event.outcome, event.text, event.error)
+            is GatewayEvent.PromptRequest -> AssistantFrame.Request(event)
+            is GatewayEvent.RequestCancelled -> AssistantFrame.Withdrawn(event.sessionId, event.rpcId, null)
+            is GatewayEvent.ApprovalCancelled -> AssistantFrame.Withdrawn(event.sessionId, null, event.requestIds)
+            else -> null
+        }
+    }
+
+    private fun parseReply(frame: JSONObject): AssistantFrame.Reply? {
+        val id = frame.opt("id") as? Int ?: return null
+        frame.optJSONObject("error")?.let { error ->
+            return AssistantFrame.Reply(id, errorCode = error.opt("code") as? Int ?: -1, errorMessage = text(error, "message"))
+        }
+        val result = frame.optJSONObject("result") ?: return AssistantFrame.Reply(id)
+        val info = result.optJSONObject("info") ?: JSONObject()
+        val messages = result.optJSONArray("messages")
+        val lastAnswer = lastText(messages, "assistant")
+        return AssistantFrame.Reply(
+            id,
+            sessionId = text(result, "session_id"),
+            storedId = text(result, "stored_session_id") ?: text(result, "session_key") ?: text(info, "stored_session_id"),
+            running = (result.opt("running") as? Boolean) ?: (info.opt("running") as? Boolean),
+            lastAnswer = lastAnswer?.first,
+            lastQuestion = lastText(messages, "user", before = lastAnswer?.second)?.first,
+            attached = result.opt("attached") as? Boolean,
+            path = text(result, "path"),
+            mime = text(result, "mime"),
+            errorMessage = if (result.opt("attached") == false) text(result, "message") ?: "사진을 올리지 못했어요" else null,
+        )
+    }
+
+    /** The newest [role] row with text, optionally before index [before], with its index. */
+    private fun lastText(messages: JSONArray?, role: String, before: Int? = null): Pair<String, Int>? {
+        if (messages == null) return null
+        for (index in (minOf(before ?: messages.length(), messages.length()) - 1) downTo 0) {
+            val row = messages.optJSONObject(index) ?: continue
+            if (row.opt("role") != role) continue
+            val value = text(row, "text") ?: (row.opt("content") as? String)?.takeIf { it.isNotBlank() } ?: continue
+            return value to index
+        }
+        return null
+    }
+
+    /**
+     * The favourite models in Hermes's shared UI preferences (`/api/ui-preferences`), in starred order.
+     * The value is a JSON array of `provider::model` keys, stored as text.
+     */
+    fun favourites(preferences: JSONObject): List<AssistantModel> {
+        val raw = preferences.optJSONObject("values")?.opt(FAVOURITES_KEY) ?: return emptyList()
+        val keys = when (raw) {
+            is JSONArray -> raw
+            is String -> runCatching { JSONTokener(raw).nextValue() as? JSONArray }.getOrNull()
+            else -> null
+        } ?: return emptyList()
+        return (0 until keys.length()).mapNotNull { (keys.opt(it) as? String)?.let(AssistantModel::parse) }.distinct()
+    }
+
+    private const val FAVOURITES_KEY = "hermes.desktop.favorite-models"
+
+    private fun text(obj: JSONObject, name: String): String? = (obj.opt(name) as? String)?.takeIf { it.isNotBlank() }
+
+    private fun int(obj: JSONObject, name: String): Int? = (obj.opt(name) as? Number)?.toInt()
+}
