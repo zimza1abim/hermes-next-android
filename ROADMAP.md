@@ -3,11 +3,70 @@
 > Maintenance-focused Android wrapper for Hermes Web UI. The core wrapper is
 > good as-is; product UI and workflow changes belong in Hermes WebUI.
 >
-> Last updated: 2026-11-13
+> Last updated: 2026-11-15
 
 ---
 
 ## Status snapshot
+
+- [~] Notification consolidation ([#208](https://github.com/hermes-webui/hermes-android/issues/208)):
+  one shared entry for the visible-app Settings shortcut, active WebUI
+  monitoring/reconnect work and latest browser message. No idle shortcut
+  remains after the activity stops. Reply-eligible WebUI alerts use a compact
+  Settings cogwheel; other states retain the text label. Pending approvals
+  take precedence, service teardown preserves the latest message, and stale
+  dismissals/reply results cannot erase a newer alert. A dedicated Notifications
+  section links to Android's notification controls. Official Webapp direct
+  reply, persistent native chat history and combining update/debug notifications
+  are not included. Local verification passes 47 API 35 instrumentation cases,
+  JVM tests, lint, debug build, 121 tooling tests and Markdown checks. Deliberate
+  lifecycle, dismissal, approval-priority, teardown, action-label, tap-route,
+  passive-repost and Settings-target mutations failed before source restoration.
+  Independent review identified process-restart retention, unavailable reply
+  feedback, stale tap identity and hidden terminal-result gaps; fixes and
+  regression checks are included. Alerts received during approval intentionally
+  remain read-only until reopened, because idle-session eligibility is no longer
+  proven. Final review and PR CI are pending; release, live authenticated
+  conversation and physical/OEM acceptance are not claimed.
+  PR #209's first full API 35 run exposed a cold-start Settings fixture
+  querying semantics before any Compose root existed (228 total cases, one
+  failure, two skipped). The Settings readiness query now permits an empty
+  root while polling, without changing its deadline or required content.
+  The explicit pre-launch regression fails with the original query and passes
+  with the fix; the adjacent warm deep-link fixture uses the same query.
+  The next full CI run passed API 35 but exposed an API 36 notification
+  readback race: unchanged message text was visible before replaced actions.
+  Restart-retention readiness now waits for both text and removal of dead Reply
+  inputs, preserving the assertion rather than adding sleeps or retries.
+
+- [x] Notification and Settings polish shipped in v1.3.3: a silent minimized Settings notification
+  remains available while Hermes is open or backgrounded, without an idle
+  foreground service. WebUI's idle-session browser notifications offer inline
+  Reply through the existing authenticated chat endpoint, with single-use,
+  expiring actions and explicit rejected/unconfirmed outcomes. Official Webapp
+  direct reply is excluded: its ticketed gateway and profile/session contract
+  needs separate integration. About and Updates now sit together at the bottom;
+  latest GitHub notes remain available even without a newer APK. Android API 36
+  fixtures cover RemoteInput delivery, cookie/mount/session routing, lifecycle
+  and layout. An authenticated API 36 live conversation now verifies a real
+  completion alert, actual Android RemoteInput delivery exactly once to the
+  intended session/profile, and the server-persisted agent response. Quiet
+  foreground/background notification access, its Settings action, disabling,
+  and the bottom-of-Settings version/check controls were exercised live.
+  Live QA caught a blank release-notes target outside the GitHub build; the
+  public page URL is now shared without enabling other update providers,
+  with a real MainActivity outbound-intent regression. The approved release
+  published the GitHub APK and verified Play production version 10303,
+  completed status, English release notes and descriptions through a fresh
+  Publisher API edit. Public Play visibility/review is separate and unconfirmed.
+  OEM acceptance and the remaining live-QA follow-ups stay tracked in
+  [#202](https://github.com/hermes-webui/hermes-android/issues/202).
+  The live harness now opens the activity even when a service keeps its process
+  alive and waits for an actual DevTools page; manual sign-in remains required.
+  Full-suite reply-fixture failures exposed Android dropping burst notification
+  updates, so the fixtures now respect the existing per-package rate window.
+  The live s04 prompt-card hit tests fail identically on production base
+  `330a03e` and the feature build; no prompt-layout changes were made.
 
 - [~] Issue #184 passkey investigation: AndroidX Credential Manager is
   included with the same dependency path in every WebView build, without the
@@ -17,14 +76,14 @@
   provider, and Digital Asset Links on the identity-provider sign-in domain
   for the exact app package/signing certificate. The separate blank
   Dashboard-after-Basic-login symptom is linked to Hermes Agent issue
-  [#142352](https://github.com/NousResearch/hermes-agent/issues/142352); a
+  [#124325](https://github.com/NousResearch/hermes-agent/issues/124325); a
   shared root cause is not established. The reporter still cannot complete
   Pocket ID passkey sign-in on v1.2.2; Pocket ID may reject Android-app
   WebAuthn origins even with an association
   ([pocket-id/pocket-id#1845](https://github.com/pocket-id/pocket-id/issues/1845)).
-  No live Pocket ID flow has been verified. Issue #190 addresses an
-  Android-side viewport collapse that can blank a Dashboard used as the
-  server URL; the reporter's setup is still to be confirmed.
+  The reporter verified the cross-device QR flow in v1.3.1, but direct
+  WebView passkeys remain unsupported. The reporter also confirmed Dashboard
+  access using the `/sessions` workaround; the root route remains upstream.
 - [~] Issue #184 follow-up: proxy-gateway OAuth and optional **Sign in with
   Chrome**. A sign-in gateway approved through proxy consent (for example
   TinyAuth) may start OIDC whose callback returns to that exact gateway origin;
@@ -34,8 +93,13 @@
   back in the WebView; it needs Chrome 137+, an https callback, and
   assetlinks.json on the callback host for the installed package/signing key,
   and falls back to in-app sign-in otherwise. API 35 loopback tests cover the
-  in-app gateway flow and the http-callback fallback; a real Auth Tab round trip,
-  live TinyAuth/Pocket ID, and reporter acceptance are not verified.
+  in-app gateway flow and the http-callback fallback. Recognized authorization
+  starts on a consent-allowed origin now establish an in-app flow before a
+  provider redirect, preserving cookies created by the start request. They
+  cannot safely be sent straight to Chrome, which has a separate cookie store.
+  Fixed diagnostic reason codes explain recognized fallback cases without
+  recording URLs or OAuth parameters. A real Auth Tab round trip and reporter
+  acceptance remain unverified; the reported cause has not been established.
 - [~] Issue #184 follow-up: the app no longer remembers credentials entered in
   the HTTP Basic prompt or supplies previously remembered credentials. Legacy
   encrypted data remains unused until explicitly deleted via **Forget saved
@@ -279,6 +343,9 @@ sketches are captured inline below.
 | REL-039 | 2026-11-12 | Release preparation | Prepared Android and README metadata for v1.3.0 (version code 10300): sign-in improvements, removed app-saved Basic sign-ins, and Dashboard shell repair. A minor bump because it adds a user-facing feature with no breaking change. GitHub and Play production publication are pending the approved orchestration run; F-Droid picks up the tag after fdroiddata review (Issue #141). |
 | REL-040 | 2026-11-13 | Release preparation | Prepared Android and README metadata for v1.3.1 (version code 10301): zero-height WebView viewport units fix (Issue #184, PR #195). A patch bump because it fixes broken behavior with no new setting. GitHub and Play production publication are pending the approved orchestration run; F-Droid picks up the tag after fdroiddata review (Issue #141). |
 | REL-041 | 2026-11-13 | Release preparation | Prepared Android and README metadata for v1.3.2 (version code 10302): normal Back, Settings shortcut and notification action (Issue #194); route recovery after credential edits (Issue #198). A patch bump because it fixes broken behavior with no new setting. GitHub and Play production publication are pending the approved orchestration run; F-Droid picks up the tag after fdroiddata review (Issue #141). |
+| REL-042 | 2026-11-14 | Release preparation | Prepared Android and README metadata for v1.3.3 (version code 10303): Settings notifications, verified WebUI replies, and About/Updates controls (PR #201). A patch bump because it fixes broken behavior with no new setting. Published by [orchestration run 43641941066](https://github.com/hermes-webui/hermes-android/actions/runs/43641941066) from the reviewed release merge `9716aac`: the [GitHub release](https://github.com/hermes-webui/hermes-android/releases/tag/v1.3.3) has exactly `hermes-webui-v1.3.3-github.apk`, and a fresh Publisher API edit verified Play production version 10303, completed status, English release notes and descriptions. Play review/public visibility remain unconfirmed; QA follow-ups remain in Issue #202. F-Droid picks up the tag after fdroiddata review (Issue #141). |
+| REL-043 | 2026-11-14 | Release preparation | Published v1.3.4 (version code 10304) for gateway OAuth routing and sign-in diagnostics (Issue #184) via [orchestration run 43677309445](https://github.com/hermes-webui/hermes-android/actions/runs/43677309445). The [GitHub release](https://github.com/hermes-webui/hermes-android/releases/tag/v1.3.4) contains the signed APK; a fresh Publisher API edit verified Play production version 10304, completed status, English release notes and descriptions. Public Play visibility and reporter acceptance remain unconfirmed; the exact Pocket ID/Auth Tab flow was not tested. F-Droid picks up the tag after fdroiddata review (Issue #141). |
+| REL-044 | 2026-11-15 | Release preparation | Prepared Android and README metadata for v1.3.5 (version code 10305): notification consolidation, Settings access and notification controls (Issue #208). A patch bump because it fixes broken behavior with no new setting. GitHub and Play production publication are pending the approved orchestration run; F-Droid picks up the tag after fdroiddata review (Issue #141). |
 | REL-035 | 2026-10-30 | Release / Distribution | Prepared F-Droid distribution for Issue #141. Added an MIT license. Moved Google Play Core into a new `play` build type, so the `github` APK and the new F-Droid `release` build (`com.hermeswebui.android.fdroid`) contain no Google Play code. `verifyFossDependencies` gates CI and the orchestrator. F-Droid's scanner went from 3 source problems on `main` to 0, and from 6 binary problems in the published v1.1.7 GitHub APK to 0 in the new `release` APK. The orchestrator still publishes GitHub and Play only; F-Droid picks up later tags after the one-time fdroiddata submission. |
 | BUG-056 | 2026-10-29 | Security / Authentication | Fixed Issue #134: in-WebView proxy sign-in consent is offered only when the hop that redirected is exactly the configured server origin. Redirects from another port, a subdomain, or the dashboard host on the allowlist are externalized instead of being attributed to the server. Reproduced RED on base (consent dialog shown for an allowlisted other-port redirector) and GREEN with unit and API 36 loopback tests. Form POST navigations remain attributed to the last recorded hop. |
 | BUG-055 | 2026-10-29 | Authentication / Setup | Fixed Issue #135: server checks now classify status redirects by origin. Same-origin sign-in redirects report "authentication required" without proxy consent, a same-host HTTP-to-HTTPS upgrade offers a re-validated **Use HTTPS** server URL, and only cross-origin redirects request proxy sign-in consent. Reproduced RED on base (consent requested for both cases) and GREEN with unit and API 36 loopback tests. |

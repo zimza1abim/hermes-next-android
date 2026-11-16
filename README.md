@@ -16,6 +16,7 @@
 [How it works](#-how-it-works) ·
 [Notifications](#-notifications) ·
 [Gateway hook](#-gateway-hook) ·
+[Assistant](#-quick-assistant) ·
 [Settings](#%EF%B8%8F-settings) ·
 [Limits](#-known-limits) ·
 [Build](#-build)
@@ -45,6 +46,7 @@ alerts, and answering Hermes straight from the notification.
 | 🧭 **Tap to open** | Tapping an alert opens that exact chat and closes the side menu. |
 | 🖥️ **Chats from anywhere** | Chats started on another device are found and watched too. |
 | 🔁 **Nothing missed** | Events from a dropped connection are replayed when it comes back. |
+| 🌸 **Quick assistant** | A small panel over any app: ask, search, translate or summarize, with photos, without opening the full app. |
 | 🎨 **Hermes branding** | App name **Hermes**, the Hermes Agent launcher icon, and matching notification icons. |
 
 ## 🧠 How it works
@@ -179,6 +181,40 @@ The gateway log then shows `Loaded hook 'hermes-android-ack'`.
 >   **Gateway compatibility** notice, and chat order may change until the hook
 >   is updated.
 
+## 🌸 Quick assistant
+
+A small panel that opens over whatever app is on screen and asks Hermes over the
+same gateway connection. It is a side tool: it opens at a fixed small size,
+grows a little once a chat starts, and has an expand button for long answers.
+
+**Ways to open it**
+
+| From | How |
+|---|---|
+| Launcher icon | Long-press **Hermes** › **Ask Hermes** or **Photo question** |
+| Galaxy Modes and Routines, Tasker | App activity `com.hermeswebui.android.assistant.AssistantActivity` |
+| A link or Tasker URL | `hermes://assistant`, with optional `mode=ask\|search\|translate\|summary`, `text=…` and `attach=camera` |
+| Selected text | **Translate with Hermes** in the text selection menu sends it at once |
+
+A link or another app can only fill the field: sending is always your tap. The
+same values work as intent extras named `mode`, `text` and `attach`.
+
+**What it does**
+
+- Every open starts a new chat. Earlier chats stay in the Hermes app, and an
+  answer still being written when you closed the panel is kept.
+- Attach up to four photos from the gallery or the camera. They are shrunk and
+  re-encoded first, so no location data is sent.
+- **Model chip** on the start screen: the models you starred in Hermes, every
+  signed-in provider's models with search, and the reasoning level. The choice
+  applies to that chat only and is remembered for the next one.
+- Approvals can be answered in the panel. Questions open the chat in the app.
+- **Open in app** jumps to the same chat in the Webapp.
+- Answers stream in gently, with links, code and lists rendered. Copy, ask again,
+  or replace the selected text with a translation.
+
+It needs the official Webapp server and a signed-in app.
+
 ## ⚙️ Settings
 
 Everything is under **Application Settings › Notifications**:
@@ -202,6 +238,7 @@ Everything is under **Application Settings › Notifications**:
 | A very short turn can be missed | A turn that starts and ends within the 10-second list interval, in a chat that wasn't watched, is never seen |
 | Bot chats in another profile aren't watched | The monitor connects for the gateway's launch profile only |
 | A prompt answered on another device stays in the tray | The gateway sends no event for that. Opening the app clears it |
+| The assistant connects through the network path you have | Its first connect costs a ticket and a socket round trip to the server; it stays connected for 3 minutes after you close it |
 | Your own message sent from another device appears late | The gateway doesn't relay user messages to other clients. It shows up once the turn is saved |
 
 ## 🛠 Build
@@ -238,9 +275,13 @@ build with `adb install -r` to keep your sign-in.
 | `webapp/AlertGroups.kt` | Per-chat grouping and summaries |
 | `background/HermesKeepAliveService.kt` | The foreground service that keeps the process alive |
 | `webui/HermesWebUiScripts.kt` | Scripts injected into the Webapp page |
+| `assistant/AssistantMachine.kt` | The assistant's reducer: connection, chat and turns |
+| `assistant/AssistantController.kt` | Runs the reducer, photos and model choices for the panel |
+| `assistant/AssistantScreen.kt` | The panel UI |
+| `webapp/SignInGate.kt` | Serializes sign-in ticket requests for the monitor and the assistant |
 | `gateway-patches/hermes-android-ack/` | The gateway hook |
 
-Paths under `webapp/`, `background/` and `webui/` are in
+Paths under `webapp/`, `assistant/`, `background/` and `webui/` are in
 `app/src/main/java/com/hermeswebui/android/`.
 
 </details>
@@ -335,9 +376,17 @@ press-again-to-exit confirmation. Back never opens Application Settings.
 
 Open **Application Settings** even when the page fails to load from the
 launcher icon's long-press **Settings** shortcut or the **Edit server URL**
-button on the connection error screen. While Hermes is in the background with
-**Background activity notification** enabled, its ongoing notification also has
-a **Settings** action. In WebUI, the sidebar entry still works too.
+button on the connection error screen. In **Application Settings > Notifications**,
+**While open or working** enables a silent Settings shortcut while Hermes is
+visible and background WebUI session monitoring. The idle shortcut disappears
+when you leave Hermes. Background work and the latest browser message share
+that same notification instead of adding another entry. Expand it to read the
+message and use **Reply** when supported; tapping opens the conversation.
+**Settings** becomes a compact cogwheel beside Reply, with the normal text label
+otherwise. Android controls the final action layout. **Android notification
+settings** opens the system controls for permission, sound and notification
+channels. Long-pressing an alert also opens Android's controls, not Application
+Settings. In WebUI, the sidebar entry still works too.
 
 Both frontends use the native upload picker, trusted HTTP(S) downloads,
 microphone permission handling, system-bar insets, pinch zoom, and Android
@@ -512,6 +561,7 @@ If a change belongs to Hermes everywhere, it belongs in WebUI first.
 - WebView passkey integration uses the same AndroidX Credential Manager dependency across app variants, without a Google Play Services adapter in any build. End-to-end availability remains unverified and depends on the installed Android/WebView and credential provider; omitting the optional adapter may limit compatibility on older devices. The identity-provider's sign-in domain must also publish Digital Asset Links for the exact app package and signing certificate. Some providers, including Pocket ID, may reject Android-app WebAuthn origins even with that association.
 - Reverse-proxy sign-in redirects (such as Authelia) can continue in-app after you confirm the server and login origins; `/api/status` does not need to be exposed outside proxy authentication. If that sign-in gateway (for example TinyAuth) starts its own OAuth/OIDC sign-in whose callback returns to the same gateway, the identity-provider pages also stay in the app so the gateway keeps its sign-in cookie.
 - Optional **Settings → Connection → Sign in with Chrome** (off by default) opens OAuth/OIDC sign-in pages in a Chrome Auth Tab, where browser passkeys work, and returns the callback to the app. It needs Chrome 137 or newer, an `https://` callback, and the callback host (Hermes for Hermes sign-in, or the sign-in gateway such as `auth.example.com`) must publish `/.well-known/assetlinks.json` for this app. **Copy assetlinks.json** in that setting copies the file for the exact build you have installed; Play, GitHub, F-Droid and debug builds each need their own entry. If Chrome is missing, too old, or the callback is `http://`, sign-in stays in the app. If Chrome cannot verify the app, you can **Continue in app** instead.
+- When a recognized sign-in request falls back to the WebView, the app records a reason without its URL or OAuth parameters in its diagnostic breadcrumbs. This does not establish that every provider flow can be recognized or that a live Auth Tab round trip succeeds.
 - Proxy-level HTTP Basic challenges on the configured server show a native username/password prompt with the password masked. The app no longer saves sign-ins from this prompt or automatically supplies previously remembered sign-ins. WebView may reuse an entered sign-in in memory for the same origin. Credentials embedded in a saved server URL remain part of that URL and may be sent automatically. Edit the URL to remove them, and also check the server name: leaving the name blank when adding a server copies the full URL into it, so it may need editing too. Startup, reconnect, notification taps and workspace recovery reject old routes with different URL credentials; Back skips entries with those credentials on the server host. Main-frame requests exposing outdated URL credentials for a selected or previously selected server in the current activity are blocked, including POST and popup handoffs. If history contains outdated credentials when the server changes, the app clears that history. This is not a sign-out and does not clear WebView's authentication cache. Data from the former Remember setting is inactive and can be deleted under **Settings → Connection → Forget saved sign-ins**; this does not change server URLs or names. Basic-auth challenges from other hosts are rejected.
 - Delayed WebView callbacks during a server change can still affect the displayed route or error state when their URL credentials are unchanged or absent. The app keeps the existing WebView rather than resetting it to separate those callbacks; navigation can still discard page state. This limitation remains tracked in [#184](https://github.com/hermes-webui/hermes-android/issues/184).
 
@@ -522,11 +572,39 @@ If a change belongs to Hermes everywhere, it belongs in WebUI first.
 - Downloads save to the shared Download folder on Android 10+, so they appear in Files > Downloads
 - Share-to-app intake for text and files
 - Android-backed browser notifications for Hermes WebUI alerts
-- Optional ongoing background activity notification for trusted Hermes sessions
+- One notification for the optional quiet Settings shortcut (only while
+  Hermes is visible), background WebUI monitoring/reconnect work, and the
+  latest browser message, shared by both frontends. Pending approvals take
+  priority over messages. Leaving the app removes the idle shortcut, not an
+  unread message or Android's required active-work notification. Disabling
+  **While open or working** turns off the shortcut and background monitoring,
+  not browser messages; use **Android notification settings** to mute those.
+  Update/download and opt-in debug-capture notifications remain separate.
+  No idle foreground service or process-survival guarantee is added.
+- WebUI browser alerts for an idle current session offer **Reply** directly
+  in the notification. This uses the existing signed-in session cookie and
+  WebUI chat endpoint; it does not open the app or replace a composer draft.
+  Enable notifications in WebUI as well as Android. Replies expire after
+  30 minutes, closing Hermes, a server switch, or process death; an expired
+  action cannot send; reopen the conversation instead. Stale actions cannot
+  replace a newer alert. Rejections and uncertain delivery
+  are shown explicitly, with no automatic resend. WebView-only HTTP Basic
+  credentials and client-certificate challenges cannot be reused by this
+  cookie-backed native request. Official Webapp direct reply is not supported.
+  An alert received while approval is pending stays read-only even after the
+  approval clears: open the conversation to reply, rather than assuming it is
+  still idle. Unread text can survive process restart, but Reply actions cannot;
+  obsolete actions report that they are unavailable without replacing newer alerts.
 - Persistent authenticated session-stream monitoring (`/api/session/stream`) for trusted WebUI `/session/{id}` pages (including server mount prefixes), with reconnect polling fallback when live streaming is unavailable
 - Optional debug-log capture with persistent foreground notification and one-tap stop action
 - Channel-aware app updates: Play uses in-app update flow, GitHub APK builds download and hand off to installer in-app
 - GitHub APK updates surface a stateful in-app action flow (`Check` -> `Download` -> `Install`) and still show an install-ready notification when Hermes is backgrounded
+- **About** and **Updates** are together at the bottom of Settings: see the
+  installed version, check/download/install for your build channel, and open
+  the latest GitHub release notes. GitHub checks retain the latest release
+  summary even when there is no newer APK; GitHub notes are not a claim about
+  which version Google Play has delivered. The manual notes link works in
+  every build, without enabling an update provider in F-Droid or debug builds.
 
 ### Security and trust boundaries
 
@@ -568,8 +646,8 @@ builds contain no Google Play or Firebase code.
 
 Current checked-in release metadata:
 
-- Version name: `1.3.2`
-- Version code: `10302`
+- Version name: `1.3.5`
+- Version code: `10305`
 - Play application ID: `com.hermeswebui.android`
 - GitHub application ID: `com.hermeswebui.android.github`
 - F-Droid application ID: `com.hermeswebui.android.fdroid`

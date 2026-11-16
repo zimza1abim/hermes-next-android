@@ -307,12 +307,36 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun notificationControlsOpenAndroidSettingsForThisApp() {
+        renderConfiguredSettings(1)
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val opened = java.util.concurrent.atomic.AtomicReference<android.content.Intent>()
+        val monitor = object : android.app.Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: android.content.Intent): android.app.Instrumentation.ActivityResult? {
+                if (intent.action != android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS) return null
+                opened.set(android.content.Intent(intent))
+                return android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED, null)
+            }
+        }
+        instrumentation.addMonitor(monitor)
+        try {
+            composeTestRule.onNodeWithText("Android notification settings").performScrollTo().performClick()
+            composeTestRule.waitUntil(5_000) { opened.get() != null }
+            assertThat(opened.get().getStringExtra(android.provider.Settings.EXTRA_APP_PACKAGE))
+                .isEqualTo(instrumentation.targetContext.packageName)
+            composeTestRule.onNodeWithText("While open or working").performScrollTo().assertIsDisplayed()
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
+    }
+
+    @Test
     fun configuredSettings_showsTaskBasedSectionsAndOmitsSessionReset() {
         renderConfiguredSettings(1)
 
         listOf(
             "SERVERS",
-            "APPLICATION",
+            "NOTIFICATIONS",
             "UPDATES",
             "CONNECTION",
             "NOTIFICATIONS",
@@ -437,7 +461,12 @@ class SettingsScreenTest {
         onSetWebappBackground: (WebappBackgroundSettings) -> Unit = {},
         onOpenNotificationChannel: (String?) -> Unit = {},
         batteryUnrestricted: Boolean = true,
-        onOpenBatterySettings: () -> Unit = {}
+        onOpenBatterySettings: () -> Unit = {},
+        appUpdateReleaseNotes: String? = null,
+        appUpdateDownloadUrl: String? = null,
+        onCheckAppUpdates: () -> Unit = {},
+        onDownloadAppUpdate: () -> Unit = {},
+        onOpenAppUpdateRelease: () -> Unit = {}
     ) {
         composeTestRule.setContent {
             SettingsScreen(
@@ -457,9 +486,9 @@ class SettingsScreenTest {
                 appUpdateChannelLabel = "GitHub Releases",
                 appUpdateStatus = null,
                 appUpdateReleaseUrl = null,
-                appUpdateDownloadUrl = null,
+                appUpdateDownloadUrl = appUpdateDownloadUrl,
                 appUpdateInstallReady = false,
-                appUpdateReleaseNotes = null,
+                appUpdateReleaseNotes = appUpdateReleaseNotes,
                 clientCertificateUri = clientCertificateUri,
                 clientCertificatePassword = clientCertificatePassword,
                 webappBackground = webappBackground,
@@ -484,9 +513,9 @@ class SettingsScreenTest {
                 onSetAutomaticAppUpdateChecksEnabled = {},
                 onSetClientCertificateConfig = onSetClientCertificateConfig,
                 onClearClientCertificateConfig = {},
-                onCheckAppUpdates = {},
-                onDownloadAppUpdate = {},
-                onOpenAppUpdateRelease = {},
+                onCheckAppUpdates = onCheckAppUpdates,
+                onDownloadAppUpdate = onDownloadAppUpdate,
+                onOpenAppUpdateRelease = onOpenAppUpdateRelease,
                 onViewGithubIssues = {},
                 onNewGithubIssue = {},
                 onAddProfile = { _, _, _ -> },
@@ -500,5 +529,37 @@ class SettingsScreenTest {
                 onOpenBatterySettings = onOpenBatterySettings
             )
         }
+    }
+
+    @Test
+    fun updatesAreBelowAboutAndKeepCheckAndReleaseNotesActions() {
+        var checks = 0
+        var notesOpened = 0
+        renderConfiguredSettings(
+            seconds = 1,
+            appUpdateReleaseNotes = "Fixed notification access.",
+            onCheckAppUpdates = { checks++ },
+            onOpenAppUpdateRelease = { notesOpened++ }
+        )
+        val about = composeTestRule.onNodeWithText("ABOUT").fetchSemanticsNode().positionInRoot.y
+        val updates = composeTestRule.onNodeWithText("UPDATES").fetchSemanticsNode().positionInRoot.y
+        assertThat(updates).isGreaterThan(about)
+        composeTestRule.onNodeWithText("Check for updates").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Fixed notification access.").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Latest GitHub release notes").performScrollTo().performClick()
+        assertThat(checks).isEqualTo(1)
+        assertThat(notesOpened).isEqualTo(1)
+    }
+
+    @Test
+    fun updatesNearAboutStillOfferTheAvailableDownload() {
+        var downloads = 0
+        renderConfiguredSettings(
+            seconds = 1,
+            appUpdateDownloadUrl = "https://github.com/example/hermes-github.apk",
+            onDownloadAppUpdate = { downloads++ }
+        )
+        composeTestRule.onNodeWithText("Download APK").performScrollTo().performClick()
+        assertThat(downloads).isEqualTo(1)
     }
 }

@@ -55,7 +55,50 @@ Recent cleanup keeps `MainActivity` as the Android boundary while moving cluster
 - `HermesNotificationBridgeCoordinator`: receives document-start WebUI notification bridge messages, tracks Android notification permission replies, and rejects untrusted origins.
 - `HermesClipboardBridgeCoordinator` + `HermesWebView` (Issue #180): image paste. A document-start shim wraps `navigator.clipboard.read()` and, only after the page's own call rejects with `NotAllowedError`/`SecurityError` and the page has transient user activation, asks the host over a scoped `WebMessageListener` (main frame of the configured Hermes route only, no `addJavascriptInterface`) for the clipboard's bounded raster images and text. `HermesWebView` advertises image MIME types to the IME on the configured route so Gboard can commit images; `MainActivity` reads the content URI (8 MB cap, off the main thread) and re-checks trust before dispatching a synthetic `paste` event carrying a `File` on the focused element. SVG and other types are never accepted.
 - `HermesNotificationPresenter`: renders Android-backed WebUI notifications and parses trusted notification-tap intents back into WebView navigation.
+- `HermesNotificationSlot` owns one untagged tray ID shared by the presenter
+  and reconnect foreground service. It selects a pending approval first, then
+  the latest browser message, active monitoring status, or the quiet open-app
+  shortcut. The shortcut is eligible only while the configured activity is
+  visible and **Notifications > While open or working** is enabled; stopping
+  the activity removes only that fallback. Notification controls also link to
+  Android's app notification settings without duplicating OS permission state.
+  Foreground promotion, updates, detach/teardown, dismiss and reply results
+  use the reply-action lock. Teardown detaches rather than removing the shared
+  notification, then restores the unread message or visible-app fallback.
+  Per-message delete/tap tokens fence stale dismissals, and server changes
+  clear unread content. On process restart the slot reconciles Android's retained
+  message only for the configured server, strips dead inline actions and keeps
+  unread text; expired actions report unavailable without replacing newer alerts.
+  Terminal stream results replace older unread messages and survive teardown.
+  Passive stream status does not repeatedly repost an unread message.
+  Alerts received during approval remain read-only rather than restoring Reply
+  without fresh idle-session evidence. A reply-eligible browser alert uses a compact Settings
+  cogwheel with a speech label; other states keep the Settings text.
+  Android owns final action rendering. This adds no idle service, persistent
+  chat history, process-survival guarantee, or new Webapp reply protocol.
+  Update/download and opt-in debug-log notifications remain separate.
+- `HermesNotificationReplyReceiver` accepts explicit, non-exported Android
+  RemoteInput broadcasts. The notification facade supplies only an idle WebUI
+  session ID/profile, gated positively by WebUI markers and negatively by the
+  official Webapp marker. The presenter matches that ID to a trusted notification
+  route before issuing an opaque single-use action. Bounded in-memory actions
+  expire after 30 minutes and are revoked across server selection changes and
+  activity finish/process death. The receiver rechecks encrypted selected-server
+  settings before sending; requests use URL-scoped WebView cookies, preserve
+  encoded mount prefixes and session IDs, never follow redirects or auto-resend,
+  and have an eight-second transport deadline. Only a matching session/stream
+  admission is reported as accepted (not as a completed agent response).
+  Gateway/server failures and request timeouts leave delivery unconfirmed,
+  because the upstream turn might already have started. Every replacement
+  notification, including one without Reply, revokes its previous action;
+  replacement and result posting share the same lock to fence delayed results. Native
+  SSE/approval behavior and the official Webapp gateway protocol are unchanged;
+  direct reply depends on the WebUI browser alert, not a new gateway adapter.
 - `HermesAppUpdateCoordinator`: owns automatic/manual app-update checks, channel-specific update notifications, Play update launch, and GitHub APK download intents.
+- About and Updates are adjacent at the bottom of native Settings. A current
+  GitHub result carries release metadata without offering an APK; the public
+  latest-GitHub-notes link is shared by all build types and separate from the
+  channel-specific update provider. F-Droid and debug still have no updater.
 - `HermesServerProfileCoordinator`: owns startup preflight plus add/edit/delete/switch validation and confirmation flows for Hermes server profiles.
 - `WebappGatewayCoordinator`: the only Android-facing owner of the official Webapp in the background (keep-alive service, renderer priority, gateway alerts, tray answers); see "Official Webapp in the background" below.
 - `HermesForegroundServiceCoordinator`: owns reconnect/debug foreground-service lifecycle sync so `onResume`, `onStop`, and settings toggles do not each duplicate service promotion/teardown rules.
@@ -190,7 +233,7 @@ pending; loopback WebView fixtures cover the Android boundary only.
 20. Enabling background foreground-service features from native settings (background activity notifications or debug logging) requests Android `POST_NOTIFICATIONS` on Android 13+ when needed so users can see the required persistent status notifications.
 21. Official Webapp keep-alive and gateway alerts follow "Official Webapp in the background" below; they never reuse the WebUI reconnect service or its REST approval actions.
 22. `hermes://session/{id}` deep links are handled in `MainActivity.onNewIntent`, navigating the WebView to `{serverUrl}/session/{id}` — the Hermes WebUI session route (built by `DeepLinkRoutes.sessionUrl`).
-23. An "Application Settings" entry point is injected into the Hermes WebUI sidebar immediately after the WebUI Settings item via a document-start WebView shim, with Help used only as a fallback anchor if Settings cannot be found. This shim clones the target menu item structure, strips routing attributes, injects a custom phone-outline SVG icon, and binds the click handler to the `hermes://app/settings` deep link, which triggers `MainViewModel.openSettings()` to display the native full-page settings screen overlay (`SettingsScreen`). Android exports the same `hermes://app/settings` deep link as a recovery route so native settings can be opened from ADB or an external link if WebUI is stuck on a bad route.
+23. An "Application Settings" entry point is injected into the Hermes WebUI sidebar immediately after the WebUI Settings item via a document-start WebView shim, with Help used only as a fallback anchor if Settings cannot be found. This shim clones the target menu item structure, strips routing attributes, injects a custom phone-outline SVG icon, and binds the click handler to the `hermes://app/settings` deep link, which triggers `MainViewModel.openSettings()` to display the native full-page settings screen overlay (`SettingsScreen`). Android exports the same `hermes://app/settings` deep link as a recovery route so native settings can be opened from ADB or an external link if WebUI is stuck on a bad route. The same route backs the dynamic launcher **Settings** shortcut (`launcher/AppShortcuts.kt`, republished against the enabled launcher alias after icon switches) and the shared notification's Settings action (a compact cogwheel when Reply is available). The quiet visible-app fallback requires **Notifications > While open or working**. Android Back does not open Settings (Issue #194): it walks WebView history (same-document entries only for the official Webapp), then requires a second press within two seconds to exit.
 
 ## Official Webapp in the background
 
@@ -453,7 +496,12 @@ stays in the main WebView, so the gateway's state cookie is present at its
 callback; externalizing it broke the gateway sign-in. Consent-allowed navigations
 skip `handleMainWebViewNavigation`, so `shouldOverrideUrlLoading` still runs the
 verified-callback check on them and ends the in-app OAuth flow; otherwise later
-non-allowlisted links would load in-app until the flow timeout.
+non-allowlisted links would load in-app until the flow timeout. A recognized
+authorization start on an approved origin establishes an in-app flow before
+the consent shortcut. Its response may set the callback's state cookie, so the
+start stays in WebView rather than launching it in Chrome's separate cookie store.
+The same browser-launch guard keeps a popup start on a consent-allowed origin
+in the main WebView, where its response can establish that cookie.
 
 ### Sign in with Chrome (Auth Tab)
 
@@ -476,6 +524,9 @@ WebView cookies, so the callback must establish the WebView session itself. The
 Settings action copies an `assetlinks.json` built from the installed package name
 and runtime signing-certificate SHA-256 fingerprints, so each channel (Play
 App Signing, GitHub, F-Droid, debug) gets its own entry.
+When the setting is enabled and a recognized authorization falls back, the
+diagnostic breadcrumb records a fixed reason code without URLs or OAuth parameters.
+An unrecognized authorization request cannot produce this breadcrumb.
 
 ## Build and release flow
 

@@ -1,6 +1,7 @@
 package com.hermeswebui.android.ui.settings
 
 import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -159,7 +160,8 @@ fun SettingsScreen(
     launcherIcon: LauncherIcon = LauncherIcon.DEFAULT,
     onSetLauncherIcon: (LauncherIcon) -> Unit = {},
     batteryUnrestricted: Boolean = true,
-    onOpenBatterySettings: () -> Unit = {}
+    onOpenBatterySettings: () -> Unit = {},
+    onOpenLatestReleaseNotes: () -> Unit = onOpenAppUpdateRelease
 ) {
     BackHandler(onBack = onDismiss)
 
@@ -516,7 +518,7 @@ fun SettingsScreen(
                 WelcomeGuideEntry(onShowWelcome)
 
                 // ── Application ───────────────────────────────────────────
-                SectionHeader("Application")
+                SectionHeader("Notifications")
 
                 Box(
                     modifier = Modifier
@@ -527,16 +529,33 @@ fun SettingsScreen(
                 ) {
                     Column {
                         ListItem(
+                            headlineContent = { Text("Android notification settings", color = onSurface) },
+                            supportingContent = {
+                                Text(
+                                    "Allow or mute messages, sounds, badges and lock-screen previews.",
+                                    color = onSurfaceVar
+                                )
+                            },
+                            colors = ListItemDefaults.colors(containerColor = surfaceColor),
+                            modifier = Modifier.clickable {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                )
+                            }
+                        )
+                        HorizontalDivider(color = outlineVar.copy(alpha = 0.5f))
+                        ListItem(
                             headlineContent = {
                                 Text(
-                                    "Background activity notification",
+                                    "While open or working",
                                     color = onSurface,
                                     fontWeight = FontWeight.Medium
                                 )
                             },
                             supportingContent = {
                                 Text(
-                                    "Show the latest safe Hermes session activity while the app is backgrounded",
+                                    "Show a quiet Settings shortcut while Hermes is visible and monitor WebUI sessions in the background. Messages replace the shortcut; no idle shortcut stays after leaving the app.",
                                     color = onSurfaceVar,
                                     style = MaterialTheme.typography.bodySmall
                                 )
@@ -599,24 +618,6 @@ fun SettingsScreen(
 
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                UpdatesSettingsSection(
-                    appUpdateAlertsEnabled = appUpdateAlertsEnabled,
-                    automaticAppUpdateChecksEnabled = automaticAppUpdateChecksEnabled,
-                    appUpdateChannelLabel = appUpdateChannelLabel,
-                    appUpdateStatus = appUpdateStatus,
-                    appUpdateReleaseUrl = appUpdateReleaseUrl,
-                    appUpdateDownloadUrl = appUpdateDownloadUrl,
-                    appUpdateInstallReady = appUpdateInstallReady,
-                    appUpdateReleaseNotes = appUpdateReleaseNotes,
-                    onSetAppUpdateAlertsEnabled = onSetAppUpdateAlertsEnabled,
-                    onSetAutomaticAppUpdateChecksEnabled = onSetAutomaticAppUpdateChecksEnabled,
-                    onCheckAppUpdates = onCheckAppUpdates,
-                    onDownloadAppUpdate = onDownloadAppUpdate,
-                    onOpenAppUpdateRelease = onOpenAppUpdateRelease
-                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -1068,6 +1069,25 @@ fun SettingsScreen(
                 AboutSettingsSection(
                     appVersionLabel = appVersionLabel,
                     appUpdateChannelLabel = appUpdateChannelLabel
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                UpdatesSettingsSection(
+                    appUpdateAlertsEnabled = appUpdateAlertsEnabled,
+                    automaticAppUpdateChecksEnabled = automaticAppUpdateChecksEnabled,
+                    appUpdateChannelLabel = appUpdateChannelLabel,
+                    appUpdateStatus = appUpdateStatus,
+                    appUpdateReleaseUrl = appUpdateReleaseUrl,
+                    appUpdateDownloadUrl = appUpdateDownloadUrl,
+                    appUpdateInstallReady = appUpdateInstallReady,
+                    appUpdateReleaseNotes = appUpdateReleaseNotes,
+                    onSetAppUpdateAlertsEnabled = onSetAppUpdateAlertsEnabled,
+                    onSetAutomaticAppUpdateChecksEnabled = onSetAutomaticAppUpdateChecksEnabled,
+                    onCheckAppUpdates = onCheckAppUpdates,
+                    onDownloadAppUpdate = onDownloadAppUpdate,
+                    onOpenAppUpdateRelease = onOpenAppUpdateRelease,
+                    onOpenLatestReleaseNotes = onOpenLatestReleaseNotes
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))

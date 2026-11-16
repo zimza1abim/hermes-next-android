@@ -132,6 +132,7 @@ import com.hermeswebui.android.data.SettingsRepository
 import com.hermeswebui.android.notification.HermesNotificationBridgeCoordinator
 import com.hermeswebui.android.security.ClientCertificateRequestSupport
 import com.hermeswebui.android.notification.HermesNotificationPresenter
+import com.hermeswebui.android.notification.NotificationReplyActions
 import com.hermeswebui.android.domain.ServerUrlValidator
 import com.hermeswebui.android.server.HermesServerProfileCoordinator
 import com.hermeswebui.android.server.SelectedServerNavigation
@@ -165,7 +166,6 @@ private const val HermesNotificationBridgeName = "HermesAndroidNotifications"
 private const val HermesClipboardBridgeName = "HermesAndroidClipboard"
 private const val HermesWebappGatewayBridgeName = "HermesAndroidGateway"
 private const val HermesNotificationChannelId = "hermes_webui_notifications"
-private const val HermesNotificationIdBase = 10_000
 private const val HermesVpnReconnectNotificationId = 9_900
 private const val HermesGithubIssuesListUrl = "https://github.com/hermes-webui/hermes-android/issues"
 private const val HermesGithubNewIssueUrl = "https://github.com/hermes-webui/hermes-android/issues/new/choose"
@@ -375,6 +375,7 @@ class MainActivity : ComponentActivity() {
             notificationBridgeCoordinator.onPermissionResult(granted)
             val permission = notificationBridgeCoordinator.permissionState()
             updateWebNotificationPermissionState(permission)
+            syncOngoingHermesNotification()
             if (!granted) {
                 Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -400,7 +401,6 @@ class MainActivity : ComponentActivity() {
         notificationPresenter = HermesNotificationPresenter(
             context = this,
             channelId = HermesNotificationChannelId,
-            notificationIdBase = HermesNotificationIdBase,
             isTrustedTarget = ::isTrustedNotificationTarget
         )
         notificationBridgeCoordinator = HermesNotificationBridgeCoordinator(
@@ -414,7 +414,8 @@ class MainActivity : ComponentActivity() {
                 } else {
                     notificationPresenter.showNotification(
                         payload = payload,
-                        fallbackTargetUrl = viewModel.uiState.value.currentUrl
+                        fallbackTargetUrl = viewModel.uiState.value.currentUrl,
+                        configuredServerUrl = viewModel.uiState.value.settings.serverUrl
                     )
                 }
             },
@@ -512,6 +513,9 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             viewModel.uiState.collect { state ->
+                NotificationReplyActions.onSelectedServerChanged(state.settings.serverUrl)
+                com.hermeswebui.android.notification.HermesNotificationSlot.selectServer(this@MainActivity, state.settings.serverUrl)
+                syncOngoingHermesNotification()
                 foregroundServiceCoordinator.onUiStateChanged(
                     state = state,
                     activityVisible = activityVisible
@@ -580,6 +584,7 @@ class MainActivity : ComponentActivity() {
             foregroundServiceCoordinator.onActivityResumed()
             viewModel.onAppForegrounded()
             updateWebNotificationPermissionState()
+            syncOngoingHermesNotification()
             appUpdateCoordinator.resumePendingGitHubInstallIfReady()
             refreshBatteryOptimizationState()
             viewModel.resumeAutoRetryIfNeeded()
@@ -604,6 +609,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         activityVisible = false
+        syncOngoingHermesNotification()
         voiceCaptureGate.onStop()
         appUpdateCoordinator.cancelAutomaticAppUpdateCheck()
         val state = viewModel.uiState.value
@@ -614,6 +620,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (isFinishing && ::notificationPresenter.isInitialized) {
+            notificationPresenter.cancelOngoingNotification()
+            NotificationReplyActions.clear()
+        }
         if (::serverProfileCoordinator.isInitialized) serverProfileCoordinator.dispose()
         if (::webappGateway.isInitialized) webappGateway.dispose(this)
         proxySignInDialog?.dismiss()
@@ -924,10 +934,13 @@ class MainActivity : ComponentActivity() {
                     onOpenAppUpdateRelease = {
                         val releaseUrl = uiState.appUpdateReleaseUrl
                         when {
-                            releaseUrl.isNullOrBlank() -> Unit
+                            releaseUrl.isNullOrBlank() -> openInExternalBrowser(BuildConfig.GITHUB_RELEASES_PAGE_URL)
                             releaseUrl.startsWith("play://") -> appUpdateCoordinator.startPlayUpdateFlow()
                             else -> openInExternalBrowser(releaseUrl)
                         }
+                    },
+                    onOpenLatestReleaseNotes = {
+                        openInExternalBrowser(BuildConfig.GITHUB_RELEASES_PAGE_URL)
                     },
                     onViewGithubIssues = { openInExternalBrowser(HermesGithubIssuesListUrl) },
                     onNewGithubIssue = { openInExternalBrowser(HermesGithubNewIssueUrl) },
@@ -1081,7 +1094,20 @@ class MainActivity : ComponentActivity() {
                     val handled = if (request.isForMainFrame && proxyAuthNavigation.allows(serverUrl, target)) {
                         // Consent-allowed callbacks bypass handleMainWebViewNavigation, but must still
                         // end the in-app OAuth flow so later external links are externalized.
-                        completeMainFrameOAuthIfCallback(target)
+                        if (!completeMainFrameOAuthIfCallback(target)) {
+                            val flow = parseTrustedOAuthStart(target)
+                            if (flow != null) {
+                                // The start can establish the callback's state cookie; Chrome and
+                                // WebView do not share cookies, so it must run in the WebView.
+                                if (settingsRepository.isBrowserSignInEnabled()) {
+                                    DiagnosticsLogger.record(this@MainActivity, "browser_sign_in", mapOf(
+                                        "event" to "fallback",
+                                        "reason" to "trusted_start_requires_in_app"
+                                    ))
+                                }
+                                rememberActiveMainFrameOAuth(flow)
+                            }
+                        }
                         false
                     } else {
                         handleMainWebViewNavigation(target)
@@ -1828,6 +1854,15 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
+    private fun syncOngoingHermesNotification() {
+        val state = viewModel.uiState.value
+        notificationPresenter.syncOngoingNotification(
+            activityVisible && !isFinishing && state.settings.isConfigured &&
+                state.backgroundReconnectEnabled &&
+                webNotificationPermissionState() == "granted"
+        )
+    }
+
     private fun requestNotificationPermissionIfNeeded() {
         notificationBridgeCoordinator.requestNotificationPermissionIfNeeded()
     }
@@ -2511,12 +2546,19 @@ class MainActivity : ComponentActivity() {
     /** Opens a trusted OAuth start in a Chrome Auth Tab when the user opted in and Chrome supports it. */
     private fun launchBrowserSignIn(flow: OAuthPopupFlow, authorizeUrl: String): Boolean {
         if (!settingsRepository.isBrowserSignInEnabled()) return false
+        fun fallback(reason: String): Boolean {
+            DiagnosticsLogger.record(this, "browser_sign_in", mapOf("event" to "fallback", "reason" to reason))
+            return false
+        }
         // Nested authorizations inside an in-app flow, including after "Continue in app", stay in the app.
-        if (activeMainFrameOAuthFlow != null) return false
-        val callback = BrowserSignIn.authTabCallback(flow.redirectUri) ?: return false
-        val browserPackage = CustomTabsClient.getPackageName(this, null) ?: return false
+        if (activeMainFrameOAuthFlow != null) return fallback("in_app_flow_active")
+        if (proxyAuthNavigation.allows(viewModel.uiState.value.settings.serverUrl, authorizeUrl)) {
+            return fallback("trusted_start_requires_in_app")
+        }
+        val callback = BrowserSignIn.authTabCallback(flow.redirectUri) ?: return fallback("unsupported_callback")
+        val browserPackage = CustomTabsClient.getPackageName(this, null) ?: return fallback("browser_unavailable")
         // An unsupported browser would silently open a plain Custom Tab that can never return the callback.
-        if (!CustomTabsClient.isAuthTabSupported(this, browserPackage)) return false
+        if (!CustomTabsClient.isAuthTabSupported(this, browserPackage)) return fallback("auth_tab_unsupported")
         val authTab = AuthTabIntent.Builder().build()
         authTab.intent.setPackage(browserPackage)
         pendingBrowserSignIn = PendingBrowserSignIn(flow, authorizeUrl, viewModel.uiState.value.settings.serverUrl)
@@ -2529,7 +2571,7 @@ class MainActivity : ComponentActivity() {
             true
         } catch (_: ActivityNotFoundException) {
             pendingBrowserSignIn = null
-            false
+            fallback("browser_launch_failed")
         }
     }
 
