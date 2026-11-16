@@ -11,6 +11,7 @@ import androidx.core.graphics.drawable.IconCompat
 import com.hermeswebui.android.MainActivity
 import com.hermeswebui.android.R
 import com.hermeswebui.android.assistant.AssistantActivity
+import com.hermeswebui.android.assistant.ChatActivity
 
 /**
  * Native ways into Application Settings that work even when the server page never renders
@@ -24,6 +25,8 @@ object AppShortcuts {
     val ASSISTANT_URI: Uri = Uri.parse("hermes://assistant")
     const val ASSISTANT_CAMERA_SHORTCUT_ID = "assistant_camera"
     val ASSISTANT_CAMERA_URI: Uri = Uri.parse("hermes://assistant?attach=camera")
+    const val CHATS_SHORTCUT_ID = "chats"
+    val CHATS_URI: Uri = Uri.parse("hermes://chats")
 
     fun settingsIntent(context: Context): Intent =
         Intent(Intent.ACTION_VIEW, SETTINGS_URI).setClass(context, MainActivity::class.java)
@@ -58,8 +61,16 @@ object AppShortcuts {
             .setIntent(Intent(Intent.ACTION_VIEW, ASSISTANT_CAMERA_URI).setClass(context, AssistantActivity::class.java))
             .setRank(1)
             .build()
+        val chats = ShortcutInfoCompat.Builder(context, CHATS_SHORTCUT_ID)
+            .setShortLabel(context.getString(R.string.shortcut_chats))
+            .setLongLabel(context.getString(R.string.shortcut_chats))
+            .setIcon(IconCompat.createWithResource(context, R.drawable.ic_assistant_flower))
+            .setActivity(launcher)
+            .setIntent(Intent(Intent.ACTION_VIEW, CHATS_URI).setClass(context, ChatActivity::class.java))
+            .setRank(2)
+            .build()
         try {
-            ShortcutManagerCompat.setDynamicShortcuts(context, listOf(ask, camera, shortcut))
+            ShortcutManagerCompat.setDynamicShortcuts(context, listOf(ask, camera, chats, shortcut))
         } catch (exception: RuntimeException) {
             Log.w("HermesShortcuts", "Could not publish the Settings shortcut", exception)
         }

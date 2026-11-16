@@ -82,6 +82,22 @@
 
         </activity>
 
+        <!-- The native chats: the chat list and a full conversation, with no Webapp page. -->
+        <activity
+            android:name=".assistant.ChatActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.HermesChats"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="hermes" android:host="chats" />
+            </intent-filter>
+        </activity>
+
         <!-- The assistant panel: an exported activity of the main app, with no launcher icon of its own.
              Tasker and activity pickers start it directly; Modes and Routines use the app's shortcuts.
              Its own task, so closing it returns to the app it was opened over. Not BROWSABLE: a web link

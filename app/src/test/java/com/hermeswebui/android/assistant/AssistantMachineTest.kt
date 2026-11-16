@@ -236,4 +236,80 @@ class AssistantMachineTest {
         val next = AssistantMachine.appendChunk(overlap, AssistantFrame.Delta("s", "x", 1, 0))
         assertThat(next).containsExactly(0, "abcd", 1, "x")
     }
+
+    @Test
+    fun `the chat list is the stored chats, with the ones running now marked, and is read again after a drop`() {
+        feed(AssistantInput.RefreshChats)
+        assertThat(state.wanted).isTrue()
+        feed(AssistantInput.Ticket(gen(), TicketResult("t")), AssistantInput.Opened(gen()))
+        feed(frame(AssistantFrame.Ready(true)))
+        val calls = sent.filter { it.optString("method") == "session.list" }
+        assertThat(calls.map { it.getJSONObject("params").optString("scope") }).containsExactly("stored", "")
+        assertThat(state.chatsLoading).isTrue()
+        val rows = listOf(ChatRow("a", "First", "hi", 2.0), ChatRow("b", null, null, 1.0))
+        feed(frame(AssistantFrame.Reply(calls[0].getInt("id"), sessions = rows)))
+        feed(frame(AssistantFrame.Reply(calls[1].getInt("id"), sessions = listOf(ChatRow("b", null, null, null, running = true), ChatRow("c", null, null, null)))))
+        assertThat(state.chats).isEqualTo(rows)
+        assertThat(state.live).containsExactly("b")
+        assertThat(state.chatsLoading).isFalse()
+
+        feed(AssistantInput.RefreshChats)
+        feed(AssistantInput.Closed(gen()))
+        assertThat(state.chatsDue).isTrue()
+        assertThat(state.chats).isEqualTo(rows)
+    }
+
+    @Test
+    fun `opening an earlier chat attaches to it and shows its transcript, then a question goes to that chat`() {
+        connect()
+        feed(AssistantInput.OpenChat("stored-9", "Old chat"))
+        assertThat(state.opening).isTrue()
+        assertThat(lastCall("session.resume").getJSONObject("params").getString("session_id")).isEqualTo("stored-9")
+        val history = listOf(HistoryRow(HistoryRole.USER, "q"), HistoryRow(HistoryRole.TOOL, "ls", "terminal"), HistoryRow(HistoryRole.ASSISTANT, "a"))
+        feed(reply("session.resume") { copy(sessionId = "live-9", storedId = "stored-9", history = history) })
+        assertThat(state.opening).isFalse()
+        assertThat(state.history).isEqualTo(history)
+        assertThat(state.turns).isEmpty()
+        assertThat(state.title).isEqualTo("Old chat")
+
+        ask("more")
+        assertThat(sent.none { it.optString("method") == "session.create" }).isTrue()
+        assertThat(lastCall("prompt.submit").getJSONObject("params").getString("session_id")).isEqualTo("live-9")
+        // A reconnect resumes the same chat; its transcript now repeats this screen's turn and is not taken again.
+        feed(AssistantInput.Closed(gen()))
+        reconnect(true)
+        feed(reply("session.resume") { copy(sessionId = "live-10", storedId = "stored-9", history = history + HistoryRow(HistoryRole.USER, "more")) })
+        assertThat(state.history).isEqualTo(history)
+
+        feed(AssistantInput.OpenChat("stored-2", null))
+        assertThat(state.storedId).isEqualTo("stored-9")
+    }
+
+    @Test
+    fun `a turn this screen did not send is followed in the opened chat`() {
+        connect()
+        feed(AssistantInput.OpenChat("stored-9", null))
+        feed(reply("session.resume") { copy(sessionId = "live-9", storedId = "stored-9", running = true, history = listOf(HistoryRow(HistoryRole.USER, "q"))) })
+        assertThat(state.turns.single().status).isEqualTo(TurnStatus.STREAMING)
+        assertThat(state.turns.single().question).isEmpty()
+        feed(frame(AssistantFrame.Delta("live-9", "partial", 0, 0)))
+        feed(frame(AssistantFrame.Completed("live-9", TurnOutcome.COMPLETE, "whole", null)))
+        assertThat(state.turns.single().answer).isEqualTo("whole")
+
+        feed(frame(AssistantFrame.Started("live-9")))
+        assertThat(state.turns).hasSize(2)
+        feed(frame(AssistantFrame.Started("other")))
+        assertThat(state.turns).hasSize(2)
+    }
+
+    @Test
+    fun `a new chat leaves the opened one`() {
+        connect()
+        feed(AssistantInput.OpenChat("stored-9", "Old"))
+        feed(reply("session.resume") { copy(sessionId = "live-9", storedId = "stored-9", history = listOf(HistoryRow(HistoryRole.USER, "q"))) })
+        feed(AssistantInput.NewChat)
+        assertThat(state.history).isEmpty()
+        assertThat(state.storedId).isNull()
+        assertThat(state.title).isNull()
+    }
 }

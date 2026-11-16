@@ -21,6 +21,12 @@ import androidx.compose.ui.unit.sp
 internal object AssistantMarkdown {
     private val HEADING = Regex("^#{1,6}\\s+")
     private val BULLET = Regex("^(\\s*)[-*]\\s+")
+    private val QUOTE = Regex("^\\s*>\\s?")
+    private val MARKS = Regex("\\*\\*|`|^#{1,6}\\s+|^\\s*>\\s?|^\\s*[-*]\\s+", RegexOption.MULTILINE)
+
+    /** [text] on one line with its Markdown marks removed, for a list preview. */
+    fun plain(text: String): String = MARKS.replace(text, "").replace(Regex("\\s+"), " ").trim()
+
     /** Bold, inline code, a Markdown link, or a bare web address. */
     private val INLINE = Regex("\\*\\*(.+?)\\*\\*|`([^`]+)`|\\[([^\\]]+)]\\((https?://[^)\\s]+)\\)|(https?://[^\\s<>\"']+)")
     private val TRAILING = charArrayOf('.', ',', ')', ';', ':', '!', '?', '。')
@@ -42,6 +48,20 @@ internal object AssistantMarkdown {
         return blocks
     }
 
+    /** A fenced block's language tag and body. */
+    data class Code(val language: String, val text: String)
+
+    /** [block] as code when all of it is one fence; an unfinished fence (still streaming) counts. */
+    fun codeBlock(block: String): Code? {
+        val lines = block.lines()
+        val first = lines.first().trim()
+        if (!first.startsWith("```")) return null
+        val body = lines.drop(1)
+        val closed = body.indexOfFirst { it.trim().startsWith("```") }
+        if (closed >= 0 && closed != body.lastIndex) return null
+        return Code(first.removePrefix("```").trim().take(24), (if (closed >= 0) body.dropLast(1) else body).joinToString("\n"))
+    }
+
     /** One block as styled text. [caret] adds the writing cursor after it. */
     fun render(block: String, caret: Boolean = false): AnnotatedString = buildAnnotatedString {
         val lines = block.lines()
@@ -54,7 +74,9 @@ internal object AssistantMarkdown {
                 else -> {
                     val heading = HEADING.find(raw)
                     val bullet = BULLET.find(raw)
+                    val quote = QUOTE.find(raw)
                     when {
+                        quote != null -> withStyle(QUOTED) { inline(raw.substring(quote.range.last + 1)) }
                         heading != null -> withStyle(BOLD) { inline(raw.substring(heading.range.last + 1)) }
                         bullet != null -> {
                             append(bullet.groupValues[1])
@@ -102,6 +124,7 @@ internal object AssistantMarkdown {
     }
 
     private val BOLD = SpanStyle(fontWeight = FontWeight.Bold)
+    private val QUOTED = SpanStyle(color = Rose.Muted)
     private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, background = Rose.Soft)
     private val CODE_BLOCK = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, background = Rose.Soft)
     private val LINK = TextLinkStyles(SpanStyle(color = Rose.Deep, textDecoration = TextDecoration.Underline))

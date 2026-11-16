@@ -26,6 +26,22 @@ data class AssistantModel(val provider: String, val model: String) {
     }
 }
 
+/** A chat in the list. [id] is the durable id `session.resume` opens. */
+data class ChatRow(
+    val id: String,
+    val title: String?,
+    val preview: String?,
+    /** Unix seconds. */
+    val lastActiveAt: Double?,
+    val running: Boolean = false,
+    val pinned: Boolean = false,
+)
+
+enum class HistoryRole { USER, ASSISTANT, TOOL }
+
+/** One row of a chat's earlier transcript. A tool row names the tool and what it was called with. */
+data class HistoryRow(val role: HistoryRole, val text: String, val tool: String? = null)
+
 /** The assistant socket. Each attempt runs under its own generation; older callbacks are dropped. */
 sealed interface AssistantLink {
     data object Idle : AssistantLink
@@ -90,6 +106,7 @@ sealed interface PendingCall {
     data class Submit(val turnId: String, val identity: Boolean) : PendingCall
     data class Attach(val turnId: String, val imageId: String) : PendingCall
     data object Interrupt : PendingCall
+    data class Chats(val stored: Boolean) : PendingCall
 }
 
 data class AssistantState(
@@ -111,11 +128,23 @@ data class AssistantState(
     val lingerToken: Int = 0,
     /** The socket stays open a little after the panel closes, so reopening it is instant. */
     val lingering: Boolean = false,
+    /** The stored chats, most recent first, with [live] marking the ones running now. */
+    val chats: List<ChatRow> = emptyList(),
+    val live: Set<String> = emptySet(),
+    /** A list refresh is asked for and not sent yet. */
+    val chatsDue: Boolean = false,
+    /** The opened chat's transcript from before this screen's own turns. */
+    val history: List<HistoryRow> = emptyList(),
+    /** An earlier chat was picked and its transcript has not arrived. */
+    val opening: Boolean = false,
+    val title: String? = null,
 ) {
+    val chatsLoading: Boolean get() = chatsDue || calls.values.any { it is PendingCall.Chats }
+
     val activeTurn: AssistantTurn? get() = turns.lastOrNull { it.status.active }
 
     /** The socket is wanted while the panel is shown or a turn still runs. */
-    val wanted: Boolean get() = shown || turns.any { it.status.active || it.status == TurnStatus.QUEUED }
+    val wanted: Boolean get() = shown || chatsDue || opening || turns.any { it.status.active || it.status == TurnStatus.QUEUED }
 
     val busy: Boolean get() = turns.any { it.status.active || it.status == TurnStatus.QUEUED }
 }
@@ -135,6 +164,10 @@ sealed interface AssistantInput {
     data class Again(val turnId: String, val newId: String) : AssistantInput
     /** Starts a new chat; ignored while a turn runs. */
     data object NewChat : AssistantInput
+    /** Reads the chat list again. */
+    data object RefreshChats : AssistantInput
+    /** Opens an earlier chat with its transcript; ignored while a turn runs. */
+    data class OpenChat(val storedId: String, val title: String?) : AssistantInput
     data class Approve(val rpcId: RpcId, val allow: Boolean) : AssistantInput
     /** The user asks to reconnect now. */
     data object Retry : AssistantInput
@@ -203,7 +236,13 @@ object AssistantMachine {
             else state.copy(turns = state.turns - old + AssistantTurn(input.newId, old.mode, old.question, old.prompt, images = old.images, setup = old.setup)) to emptyList()
         }
         AssistantInput.NewChat -> if (state.busy) state to emptyList()
-            else state.copy(runtimeId = null, storedId = null, turns = emptyList(), requests = emptyList()) to emptyList()
+            else state.copy(runtimeId = null, storedId = null, turns = emptyList(), requests = emptyList(),
+                history = emptyList(), opening = false, title = null) to emptyList()
+        AssistantInput.RefreshChats -> state.copy(chatsDue = true) to emptyList()
+        is AssistantInput.OpenChat -> if (state.busy || input.storedId.isBlank()) state to emptyList()
+            else state.copy(runtimeId = null, storedId = input.storedId, turns = emptyList(), requests = emptyList(),
+                history = emptyList(), opening = true, title = input.title,
+                calls = state.calls.filterValues { it != PendingCall.Resume && it != PendingCall.Create }) to emptyList()
         is AssistantInput.Approve -> approve(state, input)
         AssistantInput.Retry -> when (state.link) {
             is AssistantLink.Backoff, AssistantLink.SignedOut, AssistantLink.Unsupported -> mint(state, 0)
@@ -245,7 +284,23 @@ object AssistantMachine {
     /** Creates the chat, then submits the oldest queued question when nothing else runs. */
     private fun flush(state: AssistantState): Pair<AssistantState, List<AssistantEffect>> {
         if (state.link != AssistantLink.Ready) return state to emptyList()
+        if (state.chatsDue) {
+            val stored = state.nextId
+            val next = state.copy(chatsDue = false, nextId = stored + 2,
+                calls = state.calls + (stored to PendingCall.Chats(true)) + (stored + 1 to PendingCall.Chats(false)))
+            return flush(next).let { (flushed, sends) ->
+                flushed to (listOf(AssistantEffect.Send(state.gen, AssistantProtocol.listSessions(stored, stored = true)),
+                    AssistantEffect.Send(state.gen, AssistantProtocol.listSessions(stored + 1, stored = false))) + sends)
+            }
+        }
         if (state.calls.values.any { it == PendingCall.Create || it == PendingCall.Resume }) return state to emptyList()
+        // A chat picked from the list on a socket that is already up: attach to it now.
+        if (state.opening && state.runtimeId == null) {
+            val stored = state.storedId ?: return state.copy(opening = false) to emptyList()
+            val id = state.nextId
+            return state.copy(nextId = id + 1, calls = state.calls + (id to PendingCall.Resume)) to
+                listOf(AssistantEffect.Send(state.gen, AssistantProtocol.resume(id, state.authority, stored)))
+        }
         val queued = state.turns.firstOrNull { it.status == TurnStatus.QUEUED } ?: return state to emptyList()
         if (state.runtimeId == null) {
             if (state.storedId != null) return state to emptyList()
@@ -336,7 +391,7 @@ object AssistantMachine {
         return when (frame) {
             is AssistantFrame.Reply -> reply(state, frame)
             is AssistantFrame.WindowRequest -> state to listOf(AssistantEffect.Send(state.gen, AssistantProtocol.notShown(frame.rpcId)))
-            is AssistantFrame.Started -> ours(state, frame.sessionId) { turn -> turn.copy(status = TurnStatus.STREAMING) }
+            is AssistantFrame.Started -> ours(watching(state, frame.sessionId), frame.sessionId) { turn -> turn.copy(status = TurnStatus.STREAMING) }
             is AssistantFrame.Delta -> ours(state, frame.sessionId) { turn ->
                 turn.copy(status = TurnStatus.STREAMING, segments = appendChunk(turn.segments, frame))
             }
@@ -365,6 +420,11 @@ object AssistantMachine {
         val base = state.copy(calls = state.calls - frame.id)
         return when (call) {
             PendingCall.Capabilities, PendingCall.Interrupt -> base to emptyList()
+            is PendingCall.Chats -> when {
+                !frame.ok || frame.sessions == null -> base
+                call.stored -> base.copy(chats = frame.sessions)
+                else -> base.copy(live = frame.sessions.filter { it.running }.mapTo(mutableSetOf()) { it.id })
+            } to emptyList()
             PendingCall.Create -> if (frame.ok && frame.sessionId != null) base.copy(runtimeId = frame.sessionId, storedId = frame.storedId) to emptyList()
                 else base.copy(turns = base.turns.map {
                     if (it.status == TurnStatus.QUEUED) it.copy(status = TurnStatus.FAILED, error = frame.errorMessage ?: "새 대화를 만들지 못했어요") else it
@@ -393,11 +453,14 @@ object AssistantMachine {
     /** After a reconnect: the chat's new runtime id, and how the turn that ran while away ended. */
     private fun resumed(state: AssistantState, frame: AssistantFrame.Reply): Pair<AssistantState, List<AssistantEffect>> {
         if (!frame.ok || frame.sessionId == null) {
-            return state.copy(runtimeId = null, storedId = null, turns = state.turns.map {
+            return state.copy(runtimeId = null, storedId = null, opening = false, turns = state.turns.map {
                 if (it.status.active) it.copy(status = TurnStatus.FAILED, error = "대화를 다시 열지 못했어요") else it
             }) to emptyList()
         }
-        val next = state.copy(runtimeId = frame.sessionId, storedId = frame.storedId ?: state.storedId)
+        val attached = state.copy(runtimeId = frame.sessionId, storedId = frame.storedId ?: state.storedId, opening = false)
+        // The transcript already holds this screen's own turns, so it is taken only for a chat just opened.
+        val next = if (state.turns.isNotEmpty() || frame.history == null) attached
+            else attached.copy(history = frame.history).let { if (frame.running == true) watching(it, frame.sessionId) else it }
         val turn = next.activeTurn ?: return next to emptyList()
         val running = frame.running == true
         return when {
@@ -413,6 +476,15 @@ object AssistantMachine {
             }) to emptyList()
         }
     }
+
+    /**
+     * A turn this screen did not send is running in its chat (started from another device, or before
+     * the chat was opened): a turn without a question takes its answer.
+     */
+    private fun watching(state: AssistantState, sessionId: String): AssistantState =
+        if (sessionId != state.runtimeId || state.activeTurn != null) state
+        else state.copy(turns = (state.turns + AssistantTurn("remote-${state.nextId}-${state.turns.size}", AssistantMode.ASK, "", "",
+            status = TurnStatus.STREAMING)).takeLast(MAX_TURNS))
 
     /** Applies [change] to the running turn when [sessionId] is this panel's chat. */
     private fun ours(state: AssistantState, sessionId: String, change: (AssistantTurn) -> AssistantTurn): Pair<AssistantState, List<AssistantEffect>> {
@@ -439,6 +511,8 @@ object AssistantMachine {
             calls = emptyMap(),
             runtimeId = null,
             requests = emptyList(),
+            // A list read that died with the socket is asked again on the next one.
+            chatsDue = state.chatsDue || state.calls.values.any { it is PendingCall.Chats },
             // A photo staged on the old socket's session is uploaded again with the question.
             turns = state.turns.map {
                 when (it.status) {

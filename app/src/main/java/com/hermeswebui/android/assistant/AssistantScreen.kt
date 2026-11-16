@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -260,7 +261,7 @@ private fun Header(state: AssistantState, expanded: Boolean, onExpand: () -> Uni
     }
 }
 
-private fun linkLabel(link: AssistantLink) = when (link) {
+internal fun linkLabel(link: AssistantLink) = when (link) {
     AssistantLink.Ready -> "ONLINE" to Rose.Online
     is AssistantLink.Minting, is AssistantLink.Connecting, is AssistantLink.Attaching -> "CONNECTING" to Rose.Rose
     is AssistantLink.Backoff -> "OFFLINE" to Rose.Muted
@@ -271,7 +272,7 @@ private fun linkLabel(link: AssistantLink) = when (link) {
 
 /** " · 00:12" after WRITING: how long the answer has been running. */
 @Composable
-private fun Elapsed(turnId: String) {
+internal fun Elapsed(turnId: String) {
     val started = remember(turnId) { System.currentTimeMillis() }
     val now = remember(turnId) { mutableLongStateOf(started) }
     LaunchedEffect(turnId) {
@@ -301,7 +302,7 @@ private fun Greeting(models: ModelChoice, actions: AssistantActions) {
 }
 
 @Composable
-private fun Conversation(state: AssistantState, replaceable: Boolean, actions: AssistantActions) {
+internal fun Conversation(state: AssistantState, replaceable: Boolean, actions: AssistantActions) {
     val list = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val atBottom by remember { derivedStateOf { !list.canScrollForward } }
@@ -310,7 +311,7 @@ private fun Conversation(state: AssistantState, replaceable: Boolean, actions: A
     LaunchedEffect(list.isScrollInProgress, atBottom) {
         if (atBottom) follow = true else if (list.isScrollInProgress) follow = false
     }
-    val count = state.turns.size + state.requests.size
+    val count = state.history.size + state.turns.size + state.requests.size
     LaunchedEffect(count) {
         if (count > 0) {
             follow = true
@@ -334,6 +335,7 @@ private fun Conversation(state: AssistantState, replaceable: Boolean, actions: A
             verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
+            itemsIndexed(state.history, key = { index, _ -> "history-$index" }) { _, row -> HistoryItem(row) }
             items(state.turns, key = { it.id }) { turn ->
                 // Fades in; no placement animation, which made the growing answer stutter.
                 Box(Modifier.animateItem(placementSpec = null)) {
@@ -374,19 +376,7 @@ private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, behindAnother: Bo
             if (turn.images.isNotEmpty()) Row(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 turn.images.forEach { id -> PhotoThumb(actions.thumbnail(id), size = 74.dp) }
             }
-            if (turn.question.isNotEmpty()) {
-                val shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
-                Text(
-                    turn.question,
-                    style = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
-                    maxLines = 8,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .shadow(6.dp, shape, ambientColor = Lilac.copy(alpha = 0.3f), spotColor = Lilac.copy(alpha = 0.3f))
-                        .clip(shape).background(Rose.Bubble)
-                        .padding(horizontal = 15.dp, vertical = 11.dp),
-                )
-            }
+            if (turn.question.isNotEmpty()) QuestionBubble(turn.question, maxLines = 8)
         }
         Column(Modifier.padding(top = 14.dp)) {
             val answer = turn.answer
@@ -416,20 +406,81 @@ private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, behindAnother: Bo
     }
 }
 
+@Composable
+internal fun QuestionBubble(text: String, maxLines: Int) {
+    val shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
+    Text(
+        text,
+        style = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .shadow(6.dp, shape, ambientColor = Lilac.copy(alpha = 0.3f), spotColor = Lilac.copy(alpha = 0.3f))
+            .clip(shape).background(Rose.Bubble)
+            .padding(horizontal = 15.dp, vertical = 11.dp),
+    )
+}
+
+/** One row of the transcript from before this screen's own turns. */
+@Composable
+private fun HistoryItem(row: HistoryRow) {
+    when (row.role) {
+        HistoryRole.USER -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Box(Modifier.widthIn(max = 300.dp)) { QuestionBubble(row.text, maxLines = 24) }
+        }
+        HistoryRole.ASSISTANT -> Answer(row.text, writing = false)
+        HistoryRole.TOOL -> Row(
+            Modifier.clip(RoundedCornerShape(12.dp)).background(Rose.Soft).padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(row.tool.orEmpty(), style = RoseType.Meta.copy(color = Rose.ChipText), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false))
+            if (row.text.isNotEmpty()) Text(
+                row.text, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Rose.Muted, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}
+
 /** The answer as paragraph blocks: while it streams only the last block changes, so only it is laid out again. */
 @Composable
-private fun Answer(shown: String, writing: Boolean) {
+internal fun Answer(shown: String, writing: Boolean) {
     val blocks = remember(shown) { AssistantMarkdown.blocks(shown) }
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             blocks.forEachIndexed { index, block ->
                 val tail = writing && index == blocks.lastIndex
-                val styled = remember(block, tail) {
-                    AssistantMarkdown.render(block, caret = tail).let { if (tail) shimmerTail(it) else it }
+                val code = remember(block) { AssistantMarkdown.codeBlock(block) }
+                if (code != null) CodeBlock(code)
+                else {
+                    val styled = remember(block, tail) {
+                        AssistantMarkdown.render(block, caret = tail).let { if (tail) shimmerTail(it) else it }
+                    }
+                    Text(styled, style = RoseType.Body)
                 }
-                Text(styled, style = RoseType.Body)
             }
         }
+    }
+}
+
+/** A fenced block on its own: long lines scroll sideways instead of wrapping, and the code copies alone. */
+@Composable
+private fun CodeBlock(code: AssistantMarkdown.Code) {
+    val clipboard = LocalClipboardManager.current
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Rose.Soft)) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(code.language.ifEmpty { "code" }.uppercase(), style = RoseType.Meta, modifier = Modifier.weight(1f))
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).clickable(role = Role.Button) { clipboard.setText(AnnotatedString(code.text)) }
+                    .semantics { contentDescription = "코드 복사" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.ContentCopy, null, tint = Rose.Muted, modifier = Modifier.size(15.dp)) }
+        }
+        Text(
+            code.text, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 19.sp, color = Rose.Text, softWrap = false,
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+        )
     }
 }
 
@@ -450,7 +501,7 @@ private fun AnswerActions(answer: String, canReplace: Boolean, actions: Assistan
 }
 
 @Composable
-private fun CopyButton(text: String) {
+internal fun CopyButton(text: String) {
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
@@ -478,7 +529,7 @@ private fun statusNote(turn: AssistantTurn, behindAnother: Boolean): String? = w
 }
 
 @Composable
-private fun RequestCard(request: GatewayEvent.PromptRequest, actions: AssistantActions) {
+internal fun RequestCard(request: GatewayEvent.PromptRequest, actions: AssistantActions) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Rose.Field)
             .border(1.dp, Rose.Rose, RoundedCornerShape(24.dp)).padding(18.dp),
@@ -506,7 +557,7 @@ private fun RequestCard(request: GatewayEvent.PromptRequest, actions: AssistantA
 }
 
 @Composable
-private fun Footer(
+internal fun Footer(
     state: AssistantState,
     draft: String,
     mode: AssistantMode,
@@ -550,7 +601,7 @@ private fun Footer(
 
 /** The model and reasoning new chats run with: the models starred in Hermes first, every model a tap away. */
 @Composable
-private fun ModelChip(models: ModelChoice, actions: AssistantActions) {
+internal fun ModelChip(models: ModelChoice, actions: AssistantActions) {
     var open by remember { mutableStateOf(false) }
     var browsing by remember { mutableStateOf(false) }
     val setup = models.setup
@@ -777,7 +828,7 @@ private fun modeLabel(mode: AssistantMode) = when (mode) {
 }
 
 @Composable
-private fun Banner(link: AssistantLink, actions: AssistantActions) {
+internal fun Banner(link: AssistantLink, actions: AssistantActions) {
     val (text, button, action) = when (link) {
         AssistantLink.SignedOut -> Triple("Hermes 앱에서 다시 로그인해 주세요", "앱 열기", actions.onOpenApp)
         AssistantLink.Unsupported -> Triple("공식 Hermes Webapp 서버에서만 쓸 수 있어요", "다시 확인", actions.onRetry)
@@ -883,14 +934,14 @@ private fun placeholder(mode: AssistantMode) = when (mode) {
 }
 
 @Composable
-private fun PhotoThumb(image: ImageBitmap?, size: Dp) {
+internal fun PhotoThumb(image: ImageBitmap?, size: Dp) {
     Box(Modifier.size(size).clip(RoundedCornerShape(18.dp)).background(Rose.Soft).border(1.dp, Rose.Border, RoundedCornerShape(18.dp))) {
         if (image != null) Image(image, contentDescription = "첨부한 사진", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
     }
 }
 
 @Composable
-private fun RoundIcon(icon: ImageVector, label: String, filled: Boolean = false, onClick: () -> Unit) {
+internal fun RoundIcon(icon: ImageVector, label: String, filled: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier.size(42.dp).padding(1.dp).clip(CircleShape).background(if (filled) Rose.Soft else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
@@ -899,7 +950,7 @@ private fun RoundIcon(icon: ImageVector, label: String, filled: Boolean = false,
 }
 
 @Composable
-private fun PillButton(label: String, filled: Boolean, modifier: Modifier = Modifier, icon: ImageVector? = null, onClick: () -> Unit) {
+internal fun PillButton(label: String, filled: Boolean, modifier: Modifier = Modifier, icon: ImageVector? = null, onClick: () -> Unit) {
     Row(
         modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(22.dp))
             .background(if (filled) Rose.Deep else Rose.Field)

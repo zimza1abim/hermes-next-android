@@ -29,6 +29,10 @@ sealed interface AssistantFrame {
         val attached: Boolean? = null,
         val path: String? = null,
         val mime: String? = null,
+        /** A `session.list` answer's chats. */
+        val sessions: List<ChatRow>? = null,
+        /** A transcript reply's rows, oldest first. */
+        val history: List<HistoryRow>? = null,
     ) : AssistantFrame {
         val ok: Boolean get() = errorCode == null && errorMessage == null
     }
@@ -94,6 +98,12 @@ object AssistantProtocol {
         call(id, "session.resume", JSONObject().put("session_id", storedId)
             .apply { if (!authority) put("inline_images", false) })
 
+    /** The chats to pick from: the stored ones with their preview and time, or the ones live right now. */
+    fun listSessions(id: Int, stored: Boolean): String =
+        call(id, "session.list", JSONObject().put("limit", MAX_CHATS).apply {
+            if (stored) put("scope", "stored").put("picker", true)
+        })
+
     fun interrupt(id: Int, sessionId: String): String = call(id, "session.interrupt", JSONObject().put("session_id", sessionId))
 
     fun approval(request: GatewayEvent.ApprovalRequested, allow: Boolean): String? =
@@ -154,6 +164,8 @@ object AssistantProtocol {
             attached = result.opt("attached") as? Boolean,
             path = text(result, "path"),
             mime = text(result, "mime"),
+            sessions = result.optJSONArray("sessions")?.let(::chats),
+            history = messages?.let(::history),
             errorMessage = if (result.opt("attached") == false) text(result, "message") ?: "사진을 올리지 못했어요" else null,
         )
     }
@@ -196,6 +208,51 @@ object AssistantProtocol {
             if (models.isEmpty()) null else CatalogProvider(slug, text(row, "name") ?: slug, models.map { AssistantModel(slug, it) })
         }
     }
+
+    private fun chats(rows: JSONArray): List<ChatRow> = (0 until rows.length()).mapNotNull { index ->
+        val row = rows.optJSONObject(index) ?: return@mapNotNull null
+        val id = text(row, "id") ?: text(row, "session_id") ?: return@mapNotNull null
+        ChatRow(
+            id = id,
+            title = text(row, "title") ?: text(row, "root_title"),
+            preview = (text(row, "last_reply") ?: text(row, "preview"))?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
+            lastActiveAt = ((row.opt("last_active_at") ?: row.opt("started_at")) as? Number)?.toDouble(),
+            running = row.opt("running") == true,
+            pinned = row.opt("pinned") == true,
+        )
+    }
+
+    /** The display rows the server projects from a stored transcript; rows with nothing to show are skipped. */
+    private fun history(rows: JSONArray): List<HistoryRow> {
+        val out = mutableListOf<HistoryRow>()
+        // A run of tool calls is one row: the tools in order, and what the last one was called with.
+        val tools = mutableListOf<String>()
+        var context = ""
+        fun flushTools() {
+            if (tools.isEmpty()) return
+            out += HistoryRow(HistoryRole.TOOL, context, tools.joinToString(", ").take(MAX_PREVIEW))
+            tools.clear()
+            context = ""
+        }
+        for (index in 0 until rows.length()) {
+            val row = rows.optJSONObject(index) ?: continue
+            val role = row.opt("role")
+            if (role == "tool") {
+                tools += text(row, "name") ?: text(row, "tool_name") ?: "tool"
+                context = text(row, "context")?.take(MAX_PREVIEW) ?: context
+                continue
+            }
+            val shown = if (role == "user" || role == "assistant") text(row, "text") ?: text(row, "content") else null
+            if (shown == null) continue
+            flushTools()
+            out += HistoryRow(if (role == "user") HistoryRole.USER else HistoryRole.ASSISTANT, shown)
+        }
+        flushTools()
+        return out
+    }
+
+    private const val MAX_CHATS = 100
+    private const val MAX_PREVIEW = 160
 
     private fun strings(array: JSONArray?): List<String> =
         if (array == null) emptyList() else (0 until array.length()).mapNotNull { (array.opt(it) as? String)?.trim()?.takeIf(String::isNotEmpty) }

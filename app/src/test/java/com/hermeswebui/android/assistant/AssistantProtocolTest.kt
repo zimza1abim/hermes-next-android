@@ -111,4 +111,24 @@ class AssistantProtocolTest {
         assertThat(modelName("gpt-6.1-sol")).isEqualTo("GPT 6.1 Sol")
         assertThat(modelName("gemini-4-argon")).isEqualTo("Gemini 4 Argon")
     }
+
+    @Test
+    fun `a session list reply becomes chat rows and a transcript reply becomes history rows`() {
+        val list = AssistantProtocol.parse("""{"jsonrpc":"2.0","id":4,"result":{"scope":"stored","sessions":[
+            {"id":"root-1","session_id":"tip-1","title":"Trip","preview":"first line","last_reply":"the\nanswer","last_active_at":1700000000.5,"pinned":true},
+            {"session_id":"s2","title":"","started_at":12,"running":true},{"title":"no id"}]}}""") as AssistantFrame.Reply
+        assertThat(list.sessions).containsExactly(
+            ChatRow("root-1", "Trip", "the answer", 1700000000.5, pinned = true),
+            ChatRow("s2", null, null, 12.0, running = true),
+        ).inOrder()
+
+        val resumed = AssistantProtocol.parse("""{"jsonrpc":"2.0","id":5,"result":{"session_id":"live","messages":[
+            {"role":"user","text":"hello"},{"role":"tool","name":"terminal","context":"ls -la","args":{"command":"ls -la"}},
+            {"role":"assistant","text":"hi"},{"role":"assistant","text":"  "},{"role":"system","text":"note"}]}}""") as AssistantFrame.Reply
+        assertThat(resumed.history).containsExactly(
+            HistoryRow(HistoryRole.USER, "hello"), HistoryRow(HistoryRole.TOOL, "ls -la", "terminal"), HistoryRow(HistoryRole.ASSISTANT, "hi"),
+        ).inOrder()
+        assertThat(resumed.lastAnswer).isEqualTo("hi")
+        assertThat(JSONObject(AssistantProtocol.listSessions(1, stored = true)).getJSONObject("params").getBoolean("picker")).isTrue()
+    }
 }

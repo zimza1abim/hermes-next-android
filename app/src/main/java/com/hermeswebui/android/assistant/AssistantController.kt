@@ -23,13 +23,13 @@ import kotlinx.coroutines.flow.StateFlow
 /** The full model list as far as it has been read. */
 data class Catalog(val providers: List<CatalogProvider> = emptyList(), val loading: Boolean = false, val failed: Boolean = false)
 
-class AssistantController private constructor(private val context: Context) {
+class AssistantController private constructor(private val context: Context, private val name: String) {
     private val handler = Handler(Looper.getMainLooper())
     private val repository = SettingsRepository(context)
     private val socket = AssistantSocket(handler, { repository.getSettings("", "").serverUrl }, ::dispatch)
     private val _state = MutableStateFlow(AssistantState())
     val state: StateFlow<AssistantState> = _state
-    private val prefs = context.getSharedPreferences("hermes_assistant", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
     /** The unsent text, kept while the panel is closed and across an app restart. */
     val draft = MutableStateFlow(prefs.getString(KEY_DRAFT, "").orEmpty())
     val mode = MutableStateFlow(AssistantMode.ASK)
@@ -186,6 +186,14 @@ class AssistantController private constructor(private val context: Context) {
 
     fun retry() = dispatch(AssistantInput.Retry)
 
+    fun refreshChats() = dispatch(AssistantInput.RefreshChats)
+
+    fun openChat(storedId: String, title: String?) {
+        dispatch(AssistantInput.OpenChat(storedId, title))
+        pendingImages.value = emptyList()
+        trimImages()
+    }
+
     fun approve(request: com.hermeswebui.android.webapp.RpcId, allow: Boolean) = dispatch(AssistantInput.Approve(request, allow))
 
     private fun dispatch(input: AssistantInput) {
@@ -230,14 +238,24 @@ class AssistantController private constructor(private val context: Context) {
         val ids = if (current.shown) setOfNotNull(current.runtimeId, current.storedId) else emptySet()
         if (ids == shownIds) return
         shownIds = ids
-        WebappGatewayCoordinator.obtain(context).setShownElsewhere(ids)
+        shownByScreen[name] = ids
+        WebappGatewayCoordinator.obtain(context).setShownElsewhere(shownByScreen.values.flatten().toSet())
     }
 
     companion object {
         @Volatile private var shared: AssistantController? = null
+        @Volatile private var chats: AssistantController? = null
+        /** The chats each screen shows; the background monitor stays quiet about all of them. Main thread only. */
+        private val shownByScreen = mutableMapOf<String, Set<String>>()
 
+        /** The quick panel's chat. */
         fun obtain(context: Context): AssistantController = shared ?: synchronized(this) {
-            shared ?: AssistantController(context.applicationContext).also { shared = it }
+            shared ?: AssistantController(context.applicationContext, "hermes_assistant").also { shared = it }
+        }
+
+        /** The full chat screen's own chat and socket, so the panel and the screen never share a conversation. */
+        fun obtainChats(context: Context): AssistantController = chats ?: synchronized(this) {
+            chats ?: AssistantController(context.applicationContext, "hermes_chats").also { chats = it }
         }
 
         private const val MAX_PHOTOS = 4

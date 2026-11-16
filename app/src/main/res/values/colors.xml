@@ -1,4 +1,5 @@
 <resources>
     <color name="brand_ink">#0C1B24</color>
     <color name="brand_sky">#3A86B8</color>
+    <color name="hermes_chats_background">#FFF9FC</color>
 </resources>
