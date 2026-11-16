@@ -109,6 +109,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hermeswebui.android.webapp.GatewayEvent
 import com.hermeswebui.android.webapp.RpcId
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.res.painterResource
+import com.hermeswebui.android.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -335,7 +338,10 @@ internal fun Conversation(state: AssistantState, replaceable: Boolean, actions: 
             verticalArrangement = Arrangement.spacedBy(18.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            itemsIndexed(state.history, key = { index, _ -> "history-$index" }) { _, row -> HistoryItem(row) }
+            itemsIndexed(state.history, key = { index, _ -> "history-$index" }) { index, row ->
+                // The bot is named once per answer, not on each part a tool call split it into.
+                HistoryItem(row, named = index == 0 || state.history[index - 1].role == HistoryRole.USER)
+            }
             items(state.turns, key = { it.id }) { turn ->
                 // Fades in; no placement animation, which made the growing answer stutter.
                 Box(Modifier.animateItem(placementSpec = null)) {
@@ -379,6 +385,7 @@ private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, behindAnother: Bo
             if (turn.question.isNotEmpty()) QuestionBubble(turn.question, maxLines = 8)
         }
         Column(Modifier.padding(top = 14.dp)) {
+            BotName()
             val answer = turn.answer
             val shown = smoothReveal(turn.id, answer)
             val writing = turn.status == TurnStatus.STREAMING || shown.length < answer.length
@@ -406,6 +413,30 @@ private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, behindAnother: Bo
     }
 }
 
+/** Who answers in this conversation; null in the quick panel, which names nobody. */
+internal class Bot(val name: String, val image: ImageBitmap?)
+
+internal val LocalBot = compositionLocalOf<Bot?> { null }
+
+/** A bot's picture in a ringed circle; the Hermes icon stands in for a bot without one. */
+@Composable
+internal fun BotAvatar(image: ImageBitmap?, size: Dp, modifier: Modifier = Modifier) {
+    val ring = modifier.size(size).border(1.5.dp, Rose.Petal, CircleShape).padding(2.5.dp).clip(CircleShape).background(Rose.Soft)
+    if (image != null) Image(image, contentDescription = null, contentScale = ContentScale.Crop, modifier = ring)
+    else Image(painterResource(R.drawable.hermes_agent_icon), contentDescription = null, contentScale = ContentScale.Crop, modifier = ring)
+}
+
+/** The bot's picture and @name above its answer. */
+@Composable
+private fun BotName() {
+    val bot = LocalBot.current ?: return
+    Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        BotAvatar(bot.image, 38.dp)
+        Text("@${bot.name}", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Rose.Deep, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
 @Composable
 internal fun QuestionBubble(text: String, maxLines: Int) {
     val shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
@@ -423,22 +454,14 @@ internal fun QuestionBubble(text: String, maxLines: Int) {
 
 /** One row of the transcript from before this screen's own turns. */
 @Composable
-private fun HistoryItem(row: HistoryRow) {
+private fun HistoryItem(row: HistoryRow, named: Boolean) {
     when (row.role) {
         HistoryRole.USER -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Box(Modifier.widthIn(max = 300.dp)) { QuestionBubble(row.text, maxLines = 24) }
         }
-        HistoryRole.ASSISTANT -> Answer(row.text, writing = false)
-        HistoryRole.TOOL -> Row(
-            Modifier.clip(RoundedCornerShape(12.dp)).background(Rose.Soft).padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(row.tool.orEmpty(), style = RoseType.Meta.copy(color = Rose.ChipText), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false))
-            if (row.text.isNotEmpty()) Text(
-                row.text, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Rose.Muted, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp),
-            )
+        HistoryRole.ASSISTANT -> Column {
+            if (named) BotName()
+            Answer(row.text, writing = false)
         }
     }
 }

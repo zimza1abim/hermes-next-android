@@ -113,22 +113,29 @@ class AssistantProtocolTest {
     }
 
     @Test
-    fun `a session list reply becomes chat rows and a transcript reply becomes history rows`() {
-        val list = AssistantProtocol.parse("""{"jsonrpc":"2.0","id":4,"result":{"scope":"stored","sessions":[
-            {"id":"root-1","session_id":"tip-1","title":"Trip","preview":"first line","last_reply":"the\nanswer","last_active_at":1700000000.5,"pinned":true},
-            {"session_id":"s2","title":"","started_at":12,"running":true},{"title":"no id"}]}}""") as AssistantFrame.Reply
-        assertThat(list.sessions).containsExactly(
-            ChatRow("root-1", "Trip", "the answer", 1700000000.5, pinned = true),
-            ChatRow("s2", null, null, 12.0, running = true),
+    fun `the sidebar feed becomes chat rows, a transcript reply history rows, and the roster bots`() {
+        val list = AssistantProtocol.sidebar(JSONObject("""{"recents":{"sessions":[
+            {"id":"a","title":"Trip","preview":"**first** `line`","last_active":1700000000.5,"pinned":true,"profile":"default","is_default_profile":true,"is_active":false},
+            {"id":"b","title":"","started_at":12,"is_active":true,"profile":"patch-pilot","is_default_profile":false},{"title":"no id"}]},"cron":{}}"""))
+        assertThat(list).containsExactly(
+            ChatRow("a", "Trip", "first line", 1700000000.5, pinned = true, profile = "default"),
+            ChatRow("b", null, null, 12.0, running = true, profile = "patch-pilot", defaultProfile = false),
         ).inOrder()
+        assertThat(AssistantProtocol.sidebar(JSONObject("{}"))).isNull()
 
         val resumed = AssistantProtocol.parse("""{"jsonrpc":"2.0","id":5,"result":{"session_id":"live","messages":[
-            {"role":"user","text":"hello"},{"role":"tool","name":"terminal","context":"ls -la","args":{"command":"ls -la"}},
+            {"role":"user","text":"hello"},{"role":"tool","name":"terminal","context":"ls -la"},
             {"role":"assistant","text":"hi"},{"role":"assistant","text":"  "},{"role":"system","text":"note"}]}}""") as AssistantFrame.Reply
-        assertThat(resumed.history).containsExactly(
-            HistoryRow(HistoryRole.USER, "hello"), HistoryRow(HistoryRole.TOOL, "ls -la", "terminal"), HistoryRow(HistoryRole.ASSISTANT, "hi"),
+        assertThat(resumed.history).containsExactly(HistoryRow(HistoryRole.USER, "hello"), HistoryRow(HistoryRole.ASSISTANT, "hi")).inOrder()
+
+        val roster = AssistantProtocol.parse("""{"jsonrpc":"2.0","id":6,"result":{"profiles":[
+            {"name":"default","display_name":"Main","has_avatar":true},
+            {"name":"patch-pilot","display_name":"x","ui_meta":{"hermes-bots":{"title":"Pilot"}},"has_avatar":false},{"name":"bare"}]}}""") as AssistantFrame.Reply
+        assertThat(roster.profiles).containsExactly(
+            ProfileRow("default", "Main", own = true), ProfileRow("patch-pilot", "Pilot", hasAvatar = false), ProfileRow("bare", "bare"),
         ).inOrder()
-        assertThat(resumed.lastAnswer).isEqualTo("hi")
-        assertThat(JSONObject(AssistantProtocol.listSessions(1, stored = true)).getJSONObject("params").getBoolean("picker")).isTrue()
+        val asset = AssistantProtocol.parse("""{"jsonrpc":"2.0","id":7,"result":{"found":true,"data":"data:image/png;base64,AA"}}""") as AssistantFrame.Reply
+        assertThat(asset.asset).isEqualTo("data:image/png;base64,AA")
+        assertThat(JSONObject(AssistantProtocol.resume(1, true, "s", "bot")).getJSONObject("params").getString("profile")).isEqualTo("bot")
     }
 }

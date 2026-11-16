@@ -238,25 +238,37 @@ class AssistantMachineTest {
     }
 
     @Test
-    fun `the chat list is the stored chats, with the ones running now marked, and is read again after a drop`() {
-        feed(AssistantInput.RefreshChats)
+    fun `the bots are read once the socket is up, each with its picture, and a chat of another bot names its profile`() {
+        feed(AssistantInput.RefreshProfiles)
         assertThat(state.wanted).isTrue()
         feed(AssistantInput.Ticket(gen(), TicketResult("t")), AssistantInput.Opened(gen()))
         feed(frame(AssistantFrame.Ready(true)))
-        val calls = sent.filter { it.optString("method") == "session.list" }
-        assertThat(calls.map { it.getJSONObject("params").optString("scope") }).containsExactly("stored", "")
-        assertThat(state.chatsLoading).isTrue()
-        val rows = listOf(ChatRow("a", "First", "hi", 2.0), ChatRow("b", null, null, 1.0))
-        feed(frame(AssistantFrame.Reply(calls[0].getInt("id"), sessions = rows)))
-        feed(frame(AssistantFrame.Reply(calls[1].getInt("id"), sessions = listOf(ChatRow("b", null, null, null, running = true), ChatRow("c", null, null, null)))))
-        assertThat(state.chats).isEqualTo(rows)
-        assertThat(state.live).containsExactly("b")
-        assertThat(state.chatsLoading).isFalse()
+        val rows = listOf(ProfileRow("default", "Hermes", own = true), ProfileRow("patch-pilot", "Pilot", hasAvatar = false))
+        feed(reply("profiles.list") { copy(profiles = rows) })
+        assertThat(state.profiles).isEqualTo(rows)
+        val asked = sent.filter { it.optString("method") == "profiles.get_asset" }
+        assertThat(asked.map { it.getJSONObject("params").getString("name") }).containsExactly("default")
+        feed(frame(AssistantFrame.Reply(asked.single().getInt("id"), asset = "data:image/png;base64,AAAA")))
+        assertThat(effects).contains(AssistantEffect.Avatar("default", "data:image/png;base64,AAAA"))
 
-        feed(AssistantInput.RefreshChats)
-        feed(AssistantInput.Closed(gen()))
-        assertThat(state.chatsDue).isTrue()
-        assertThat(state.chats).isEqualTo(rows)
+        feed(AssistantInput.Shown(true), AssistantInput.OpenChat("s-1", "Fix", profile = "patch-pilot"))
+        assertThat(lastCall("session.resume").getJSONObject("params").getString("profile")).isEqualTo("patch-pilot")
+        assertThat(state.bot).isEqualTo(rows[1])
+        feed(reply("session.resume") { copy(sessionId = "live-1", storedId = "s-1b", history = emptyList()) })
+        ask("go")
+        assertThat(lastCall("prompt.submit").getJSONObject("params").getString("profile")).isEqualTo("patch-pilot")
+        // The same list row again is the chat already open, whatever durable id the server answered with.
+        val resumes = sent.count { it.optString("method") == "session.resume" }
+        feed(frame(AssistantFrame.Completed("live-1", TurnOutcome.COMPLETE, "done", null)))
+        feed(AssistantInput.OpenChat("s-1", "Fix", profile = "patch-pilot"))
+        assertThat(sent.count { it.optString("method") == "session.resume" }).isEqualTo(resumes)
+        assertThat(state.turns).hasSize(1)
+
+        feed(AssistantInput.SelectProfile(null))
+        assertThat(state.profile).isNull()
+        assertThat(state.turns).isEmpty()
+        ask("hello", id = "turn-2")
+        assertThat(lastCall("session.create").getJSONObject("params").has("profile")).isFalse()
     }
 
     @Test
@@ -265,7 +277,7 @@ class AssistantMachineTest {
         feed(AssistantInput.OpenChat("stored-9", "Old chat"))
         assertThat(state.opening).isTrue()
         assertThat(lastCall("session.resume").getJSONObject("params").getString("session_id")).isEqualTo("stored-9")
-        val history = listOf(HistoryRow(HistoryRole.USER, "q"), HistoryRow(HistoryRole.TOOL, "ls", "terminal"), HistoryRow(HistoryRole.ASSISTANT, "a"))
+        val history = listOf(HistoryRow(HistoryRole.USER, "q"), HistoryRow(HistoryRole.ASSISTANT, "a"))
         feed(reply("session.resume") { copy(sessionId = "live-9", storedId = "stored-9", history = history) })
         assertThat(state.opening).isFalse()
         assertThat(state.history).isEqualTo(history)
@@ -281,6 +293,7 @@ class AssistantMachineTest {
         feed(reply("session.resume") { copy(sessionId = "live-10", storedId = "stored-9", history = history + HistoryRow(HistoryRole.USER, "more")) })
         assertThat(state.history).isEqualTo(history)
 
+        // A running turn keeps its chat.
         feed(AssistantInput.OpenChat("stored-2", null))
         assertThat(state.storedId).isEqualTo("stored-9")
     }

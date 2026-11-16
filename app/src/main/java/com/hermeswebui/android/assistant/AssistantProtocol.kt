@@ -29,10 +29,12 @@ sealed interface AssistantFrame {
         val attached: Boolean? = null,
         val path: String? = null,
         val mime: String? = null,
-        /** A `session.list` answer's chats. */
-        val sessions: List<ChatRow>? = null,
         /** A transcript reply's rows, oldest first. */
         val history: List<HistoryRow>? = null,
+        /** A `profiles.list` answer. */
+        val profiles: List<ProfileRow>? = null,
+        /** A `profiles.get_asset` answer's image, as a data URL. */
+        val asset: String? = null,
     ) : AssistantFrame {
         val ok: Boolean get() = errorCode == null && errorMessage == null
     }
@@ -71,8 +73,8 @@ object AssistantProtocol {
     fun capabilities(id: Int): String = call(id, "client.capabilities", JSONObject().put("server_requests", true))
 
     /** [setup] pins this chat's model and reasoning only; Hermes's own settings are left as they are. */
-    fun create(id: Int, authority: Boolean, requestId: String, setup: ChatSetup = ChatSetup()): String =
-        call(id, "session.create", JSONObject().apply {
+    fun create(id: Int, authority: Boolean, requestId: String, setup: ChatSetup = ChatSetup(), profile: String? = null): String =
+        call(id, "session.create", profile, JSONObject().apply {
             if (authority) put("request_id", requestId)
             setup.model?.let { put("model", it.model).put("provider", it.provider) }
             setup.effort?.let { put("reasoning_effort", it) }
@@ -82,29 +84,31 @@ object AssistantProtocol {
      * Canonical servers take uploaded photos as `attachments` (path and type). A legacy server keeps
      * them queued on the session from `image.attach_bytes` and its replies carry no type, so none are named.
      */
-    fun submit(id: Int, sessionId: String, text: String, submissionId: String?, images: List<ImageAttachment> = emptyList()): String {
+    fun submit(id: Int, sessionId: String, text: String, submissionId: String?, images: List<ImageAttachment> = emptyList(),
+               profile: String? = null): String {
         val attachments = images.filter { it.path != null && it.mime != null }
-        return call(id, "prompt.submit", JSONObject().put("session_id", sessionId).put("text", text).apply {
+        return call(id, "prompt.submit", profile, JSONObject().put("session_id", sessionId).put("text", text).apply {
             if (submissionId != null) put("submission_id", submissionId)
             if (attachments.isNotEmpty()) put("attachments", JSONArray(attachments.map { JSONObject().put("path", it.path).put("mime", it.mime) }))
         })
     }
 
-    fun attachImage(id: Int, sessionId: String, base64: String, filename: String): String =
-        call(id, "image.attach_bytes", JSONObject().put("session_id", sessionId).put("content_base64", base64).put("filename", filename))
+    fun attachImage(id: Int, sessionId: String, base64: String, filename: String, profile: String? = null): String =
+        call(id, "image.attach_bytes", profile, JSONObject().put("session_id", sessionId).put("content_base64", base64).put("filename", filename))
 
     /** Reattaches to [storedId] after a reconnect; the transcript tells how a turn ended while away. */
-    fun resume(id: Int, authority: Boolean, storedId: String): String =
-        call(id, "session.resume", JSONObject().put("session_id", storedId)
+    fun resume(id: Int, authority: Boolean, storedId: String, profile: String? = null): String =
+        call(id, "session.resume", profile, JSONObject().put("session_id", storedId)
             .apply { if (!authority) put("inline_images", false) })
 
-    /** The chats to pick from: the stored ones with their preview and time, or the ones live right now. */
-    fun listSessions(id: Int, stored: Boolean): String =
-        call(id, "session.list", JSONObject().put("limit", MAX_CHATS).apply {
-            if (stored) put("scope", "stored").put("picker", true)
-        })
+    fun interrupt(id: Int, sessionId: String, profile: String? = null): String =
+        call(id, "session.interrupt", profile, JSONObject().put("session_id", sessionId))
 
-    fun interrupt(id: Int, sessionId: String): String = call(id, "session.interrupt", JSONObject().put("session_id", sessionId))
+    /** The bots: this server's own profile first, then every profile it serves. */
+    fun listProfiles(id: Int): String = call(id, "profiles.list", JSONObject().put("include_sessions", false))
+
+    fun avatar(id: Int, profile: String): String =
+        call(id, "profiles.get_asset", JSONObject().put("asset", "avatar").put("name", profile))
 
     fun approval(request: GatewayEvent.ApprovalRequested, allow: Boolean): String? =
         GatewayProtocol.choiceFor(if (allow) Decision.ALLOW else Decision.DENY, request.choices)
@@ -113,6 +117,10 @@ object AssistantProtocol {
     fun notShown(rpcId: RpcId): String = GatewayProtocol.encodeNotShown(rpcId)
 
     fun ping(id: String): String = GatewayProtocol.encodePing(id)
+
+    /** [profile] routes the call to another profile the server serves; null is the server's own. */
+    private fun call(id: Int, method: String, profile: String?, params: JSONObject): String =
+        call(id, method, if (profile.isNullOrEmpty()) params else params.put("profile", profile))
 
     private fun call(id: Int, method: String, params: JSONObject): String =
         JSONObject().put("jsonrpc", "2.0").put("id", id).put("method", method).put("params", params).toString()
@@ -164,8 +172,9 @@ object AssistantProtocol {
             attached = result.opt("attached") as? Boolean,
             path = text(result, "path"),
             mime = text(result, "mime"),
-            sessions = result.optJSONArray("sessions")?.let(::chats),
             history = messages?.let(::history),
+            profiles = result.optJSONArray("profiles")?.let(::profiles),
+            asset = (result.opt("data") as? String)?.takeIf { result.opt("found") == true && it.startsWith("data:image/") },
             errorMessage = if (result.opt("attached") == false) text(result, "message") ?: "사진을 올리지 못했어요" else null,
         )
     }
@@ -209,49 +218,50 @@ object AssistantProtocol {
         }
     }
 
-    private fun chats(rows: JSONArray): List<ChatRow> = (0 until rows.length()).mapNotNull { index ->
+    private fun profiles(rows: JSONArray): List<ProfileRow> = (0 until rows.length()).mapNotNull { index ->
         val row = rows.optJSONObject(index) ?: return@mapNotNull null
-        val id = text(row, "id") ?: text(row, "session_id") ?: return@mapNotNull null
-        ChatRow(
-            id = id,
-            title = text(row, "title") ?: text(row, "root_title"),
-            preview = (text(row, "last_reply") ?: text(row, "preview"))?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
-            lastActiveAt = ((row.opt("last_active_at") ?: row.opt("started_at")) as? Number)?.toDouble(),
-            running = row.opt("running") == true,
-            pinned = row.opt("pinned") == true,
-        )
+        val name = text(row, "name") ?: return@mapNotNull null
+        // The name the Bots tab shows, else the profile's display name, else its id.
+        val title = row.optJSONObject("ui_meta")?.optJSONObject("hermes-bots")?.let { text(it, "title") } ?: text(row, "display_name")
+        ProfileRow(name, title ?: name, own = index == 0, hasAvatar = row.opt("has_avatar") != false)
+    }.distinctBy { it.name }
+
+    /**
+     * The recent chats of every profile, from the Webapp's own sidebar feed
+     * (`/api/profiles/sessions/sidebar`): the same list on every client, whichever chats are open.
+     */
+    fun sidebar(reply: JSONObject): List<ChatRow>? {
+        val rows = reply.optJSONObject("recents")?.optJSONArray("sessions") ?: return null
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val id = text(row, "id") ?: return@mapNotNull null
+            ChatRow(
+                id = id,
+                title = text(row, "title"),
+                preview = text(row, "preview")?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
+                lastActiveAt = ((row.opt("last_active") ?: row.opt("started_at")) as? Number)?.toDouble(),
+                running = row.opt("is_active") == true,
+                pinned = row.opt("pinned") == true,
+                profile = text(row, "profile"),
+                defaultProfile = row.opt("is_default_profile") != false,
+            )
+        }.distinctBy { it.profile to it.id }
     }
+
+    const val SIDEBAR_PATH = "/api/profiles/sessions/sidebar?recents_profile=all&recents_limit=200&cron_limit=1&messaging_limit=1"
 
     /** The display rows the server projects from a stored transcript; rows with nothing to show are skipped. */
-    private fun history(rows: JSONArray): List<HistoryRow> {
-        val out = mutableListOf<HistoryRow>()
-        // A run of tool calls is one row: the tools in order, and what the last one was called with.
-        val tools = mutableListOf<String>()
-        var context = ""
-        fun flushTools() {
-            if (tools.isEmpty()) return
-            out += HistoryRow(HistoryRole.TOOL, context, tools.joinToString(", ").take(MAX_PREVIEW))
-            tools.clear()
-            context = ""
+    /** The user's and the bot's own words of a stored transcript; tool rows and empty rows are left out. */
+    private fun history(rows: JSONArray): List<HistoryRow> = (0 until rows.length()).mapNotNull { index ->
+        val row = rows.optJSONObject(index) ?: return@mapNotNull null
+        val role = when (row.opt("role")) {
+            "user" -> HistoryRole.USER
+            "assistant" -> HistoryRole.ASSISTANT
+            else -> return@mapNotNull null
         }
-        for (index in 0 until rows.length()) {
-            val row = rows.optJSONObject(index) ?: continue
-            val role = row.opt("role")
-            if (role == "tool") {
-                tools += text(row, "name") ?: text(row, "tool_name") ?: "tool"
-                context = text(row, "context")?.take(MAX_PREVIEW) ?: context
-                continue
-            }
-            val shown = if (role == "user" || role == "assistant") text(row, "text") ?: text(row, "content") else null
-            if (shown == null) continue
-            flushTools()
-            out += HistoryRow(if (role == "user") HistoryRole.USER else HistoryRole.ASSISTANT, shown)
-        }
-        flushTools()
-        return out
+        (text(row, "text") ?: text(row, "content"))?.let { HistoryRow(role, it) }
     }
 
-    private const val MAX_CHATS = 100
     private const val MAX_PREVIEW = 160
 
     private fun strings(array: JSONArray?): List<String> =

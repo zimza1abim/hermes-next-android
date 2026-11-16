@@ -25,6 +25,7 @@ import java.io.File
 class ChatActivity : ComponentActivity() {
     private val controller by lazy { AssistantController.obtainChats(this) }
     private val inChat = mutableStateOf(false)
+    private val tab = mutableStateOf<String?>(null)
     private var captureUri: Uri? = null
     private val pickPhotos = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris ->
         uris.forEach(controller::addImage)
@@ -42,6 +43,8 @@ class ChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         captureUri = savedInstanceState?.getString(STATE_CAPTURE)?.let(Uri::parse)
         inChat.value = savedInstanceState?.getBoolean(STATE_IN_CHAT) ?: false
+        tab.value = savedInstanceState?.getString(STATE_TAB)
+        controller.loadAvatars()
         setContent {
             val state by controller.state.collectAsState()
             val draft by controller.draft.collectAsState()
@@ -51,6 +54,9 @@ class ChatActivity : ComponentActivity() {
             val favourites by controller.favourites.collectAsState()
             val setup by controller.setup.collectAsState()
             val catalog by controller.catalog.collectAsState()
+            val chats by controller.chats.collectAsState()
+            val loading by controller.chatsLoading.collectAsState()
+            val avatars by controller.avatars.collectAsState()
             ChatScreen(
                 state = state,
                 draft = draft,
@@ -59,24 +65,34 @@ class ChatActivity : ComponentActivity() {
                 preparing = preparing,
                 models = ModelChoice(favourites, setup, catalog),
                 actions = actions,
-                inChat = inChat.value,
-                onOpen = { row ->
-                    controller.openChat(row.id, row.title)
-                    // A running turn keeps its chat; the picked one opens only when nothing runs.
-                    inChat.value = true
-                },
-                onNew = {
-                    controller.newChat()
-                    inChat.value = true
-                },
-                onBackToList = {
-                    inChat.value = false
-                    controller.refreshChats()
-                },
-                onRefresh = controller::refreshChats,
-                onExit = ::finish,
+                view = ChatsView(chats, loading, avatars, controller::avatarKey, tab.value, inChat.value),
+                chats = chatsActions,
             )
         }
+    }
+
+    private val chatsActions by lazy {
+        ChatsActions(
+            onOpen = { row ->
+                // A running turn keeps its chat; the picked one opens only when nothing runs.
+                controller.openChat(row)
+                inChat.value = true
+            },
+            onNew = {
+                controller.selectProfile(tab.value)
+                inChat.value = true
+            },
+            onTab = { tab.value = it },
+            onBackToList = {
+                inChat.value = false
+                controller.refreshChats()
+            },
+            onRefresh = {
+                controller.refreshChats()
+                controller.refreshProfiles()
+            },
+            onExit = ::finish,
+        )
     }
 
     private val actions by lazy {
@@ -90,7 +106,7 @@ class ChatActivity : ComponentActivity() {
             onStop = controller::stop,
             onAgain = controller::again,
             onClose = { inChat.value = false },
-            onNewChat = controller::newChat,
+            onNewChat = { controller.selectProfile(controller.state.value.profile) },
             onRetry = controller::retry,
             onApprove = controller::approve,
             onOpenApp = ::openApp,
@@ -106,12 +122,14 @@ class ChatActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         captureUri?.let { outState.putString(STATE_CAPTURE, it.toString()) }
         outState.putBoolean(STATE_IN_CHAT, inChat.value)
+        outState.putString(STATE_TAB, tab.value)
     }
 
     override fun onStart() {
         super.onStart()
         controller.show(true)
         controller.refreshChats()
+        controller.refreshProfiles()
     }
 
     override fun onStop() {
@@ -151,5 +169,6 @@ class ChatActivity : ComponentActivity() {
     private companion object {
         const val STATE_CAPTURE = "capture"
         const val STATE_IN_CHAT = "in_chat"
+        const val STATE_TAB = "tab"
     }
 }

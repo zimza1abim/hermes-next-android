@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Network
 import android.os.Handler
 import android.os.Looper
@@ -186,10 +187,74 @@ class AssistantController private constructor(private val context: Context, priv
 
     fun retry() = dispatch(AssistantInput.Retry)
 
-    fun refreshChats() = dispatch(AssistantInput.RefreshChats)
+    fun refreshProfiles() = dispatch(AssistantInput.RefreshProfiles)
 
-    fun openChat(storedId: String, title: String?) {
-        dispatch(AssistantInput.OpenChat(storedId, title))
+    fun selectProfile(name: String?) {
+        dispatch(AssistantInput.SelectProfile(name))
+        pendingImages.value = emptyList()
+        trimImages()
+    }
+
+    /** Each bot's picture by profile name. The files are kept, so the pictures show before the socket is up. */
+    val avatars = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
+    private val avatarDir = java.io.File(context.filesDir, "bot-avatars")
+
+    private fun avatarFile(profile: String) =
+        java.io.File(avatarDir, profile.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80) + ".img")
+
+    /** Reads the kept pictures off the main thread; called once when the chats screen is created. */
+    fun loadAvatars() {
+        if (avatars.value.isNotEmpty()) return
+        worker.execute {
+            val read = avatarDir.listFiles().orEmpty().mapNotNull { file ->
+                decodeAvatar(runCatching { file.readBytes() }.getOrNull() ?: return@mapNotNull null)?.let { file.name.removeSuffix(".img") to it }
+            }.toMap()
+            handler.post { if (read.isNotEmpty()) avatars.value = read + avatars.value }
+        }
+    }
+
+    private fun keepAvatar(profile: String, dataUrl: String) {
+        worker.execute {
+            val bytes = runCatching { android.util.Base64.decode(dataUrl.substringAfter("base64,", ""), android.util.Base64.DEFAULT) }.getOrNull()
+                ?.takeIf { it.isNotEmpty() && it.size <= MAX_AVATAR_BYTES } ?: return@execute
+            val image = decodeAvatar(bytes) ?: return@execute
+            val file = avatarFile(profile)
+            runCatching { avatarDir.mkdirs(); file.writeBytes(bytes) }
+            handler.post { avatars.value = avatars.value + (file.name.removeSuffix(".img") to image) }
+        }
+    }
+
+    /** A bot's kept picture; [avatars] is keyed by the file-safe form of the profile name. */
+    fun avatarKey(profile: String): String = avatarFile(profile).name.removeSuffix(".img")
+
+    private fun decodeAvatar(bytes: ByteArray): ImageBitmap? = runCatching {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 512) sample *= 2
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            ?.asImageBitmap()
+    }.getOrNull()
+
+    /** The recent chats of every profile, kept so the list shows at once on the next open. */
+    val chats = MutableStateFlow(emptyList<ChatRow>())
+    val chatsLoading = MutableStateFlow(false)
+    private var chatsRead: SignInGate.Handle? = null
+
+    fun refreshChats() {
+        chatsRead?.cancel()
+        chatsLoading.value = true
+        chatsRead = readApi(AssistantProtocol.SIDEBAR_PATH) { reply ->
+            chatsLoading.value = false
+            reply?.let(AssistantProtocol::sidebar)?.let { chats.value = it }
+        } ?: run { chatsLoading.value = false; null }
+    }
+
+    /** Opens [row]; a chat of the server's own profile is reached without naming the profile. */
+    fun openChat(row: ChatRow) {
+        val own = _state.value.profiles.firstOrNull { it.own }?.name
+        val profile = row.profile?.takeUnless { it == own || (own == null && row.defaultProfile) }
+        dispatch(AssistantInput.OpenChat(row.id, row.title, profile))
         pendingImages.value = emptyList()
         trimImages()
     }
@@ -222,12 +287,13 @@ class AssistantController private constructor(private val context: Context, priv
                 val image = images[effect.imageId]
                 if (image == null) dispatch(AssistantInput.Received(effect.gen,
                     AssistantFrame.Reply(effect.id, errorCode = -1, errorMessage = "사진을 다시 골라 주세요")))
-                else if (!socket.send(effect.gen, AssistantProtocol.attachImage(effect.id, effect.sessionId, image.base64, image.filename))) {
+                else if (!socket.send(effect.gen, AssistantProtocol.attachImage(effect.id, effect.sessionId, image.base64, image.filename, _state.value.profile))) {
                     dispatch(AssistantInput.Closed(effect.gen))
                 }
             }
             is AssistantEffect.Close -> socket.close(effect.gen)
             is AssistantEffect.RetryAfter -> socket.retryAfter(effect.gen, effect.delayMs)
+            is AssistantEffect.Avatar -> keepAvatar(effect.profile, effect.data)
             is AssistantEffect.LingerAfter -> handler.postDelayed({ dispatch(AssistantInput.LingerDue(effect.token)) }, effect.delayMs)
         }
     }
@@ -259,6 +325,7 @@ class AssistantController private constructor(private val context: Context, priv
         }
 
         private const val MAX_PHOTOS = 4
+        private const val MAX_AVATAR_BYTES = 8 * 1024 * 1024
         private const val KEY_DRAFT = "draft"
         private const val KEY_MODEL = "model"
         private const val KEY_EFFORT = "effort"
