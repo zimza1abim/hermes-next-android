@@ -46,8 +46,13 @@ class AssistantActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         captureUri = savedInstanceState?.getString(STATE_CAPTURE)?.let(Uri::parse)
-        // The photo shortcut lives on the assistant's launcher entry; publish it even if the main app never opened.
-        if (savedInstanceState == null) AppShortcuts.publish(applicationContext, LauncherIconManager(applicationContext).selectedIcon())
+        // The assistant shortcuts live on the launcher icon; publish them once a process even if the main
+        // app never opened. Package-manager and shortcut-service calls stay off the panel's first frame.
+        if (!shortcutsPublished) {
+            shortcutsPublished = true
+            val app = applicationContext
+            Thread { runCatching { AppShortcuts.publish(app, LauncherIconManager(app).selectedIcon()) } }.start()
+        }
         if (savedInstanceState == null) handle(intent)
         setContent {
             val state by controller.state.collectAsState()
@@ -193,6 +198,7 @@ class AssistantActivity : ComponentActivity() {
     }
 
     companion object {
+        @Volatile private var shortcutsPublished = false
         const val EXTRA_TEXT = "text"
         const val EXTRA_MODE = "mode"
         /** `camera` opens the camera as the panel appears. */

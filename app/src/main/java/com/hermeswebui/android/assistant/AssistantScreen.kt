@@ -326,6 +326,7 @@ private fun Conversation(state: AssistantState, replaceable: Boolean, actions: A
         }
     }
     val lastTurn = state.turns.lastOrNull()?.id
+    val activeTurn = state.activeTurn?.id
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = list,
@@ -336,7 +337,12 @@ private fun Conversation(state: AssistantState, replaceable: Boolean, actions: A
             items(state.turns, key = { it.id }) { turn ->
                 // Fades in; no placement animation, which made the growing answer stutter.
                 Box(Modifier.animateItem(placementSpec = null)) {
-                    TurnItem(turn, canReplace = replaceable && turn.id == lastTurn && turn.mode == AssistantMode.TRANSLATE, actions)
+                    TurnItem(
+                        turn,
+                        canReplace = replaceable && turn.id == lastTurn && turn.mode == AssistantMode.TRANSLATE,
+                        behindAnother = activeTurn != null && activeTurn != turn.id,
+                        actions = actions,
+                    )
                 }
             }
             items(state.requests, key = { it.rpcId.json }) { request ->
@@ -361,7 +367,7 @@ private fun Conversation(state: AssistantState, replaceable: Boolean, actions: A
 }
 
 @Composable
-private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, actions: AssistantActions) {
+private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, behindAnother: Boolean, actions: AssistantActions) {
     Column(Modifier.fillMaxWidth()) {
         Column(Modifier.align(Alignment.End).widthIn(max = 300.dp), horizontalAlignment = Alignment.End) {
             if (turn.mode != AssistantMode.ASK) Text(turn.mode.name, style = RoseType.Meta, modifier = Modifier.padding(bottom = 4.dp, end = 4.dp))
@@ -384,19 +390,26 @@ private fun TurnItem(turn: AssistantTurn, canReplace: Boolean, actions: Assistan
         }
         Column(Modifier.padding(top = 14.dp)) {
             val answer = turn.answer
-            val shown = smoothReveal(turn.id, answer, live = turn.status.active)
+            val shown = smoothReveal(turn.id, answer)
             val writing = turn.status == TurnStatus.STREAMING || shown.length < answer.length
             when {
                 shown.isNotEmpty() -> Answer(shown, writing)
-                turn.status.active -> ThinkingIndicator()
+                // Waiting for the socket or the chat looks the same as waiting for the answer: one calm indicator.
+                turn.status.active || (turn.status == TurnStatus.QUEUED && !behindAnother) -> ThinkingIndicator()
                 turn.status == TurnStatus.DONE -> Text("답변이 비어 있어요", style = RoseType.Label)
             }
-            statusNote(turn)?.let {
+            statusNote(turn, behindAnother)?.let {
                 Text(it, style = RoseType.Label, color = if (turn.status == TurnStatus.FAILED) Rose.Deep else Rose.Muted, modifier = Modifier.padding(top = 8.dp))
             }
             when {
-                turn.status == TurnStatus.FAILED || turn.status == TurnStatus.STOPPED ->
-                    PillButton("다시 보내기", filled = false, modifier = Modifier.padding(top = 10.dp), icon = Icons.Rounded.Refresh) { actions.onAgain(turn.id) }
+                turn.status == TurnStatus.FAILED || turn.status == TurnStatus.STOPPED -> Row(
+                    Modifier.padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PillButton("다시 보내기", filled = false, icon = Icons.Rounded.Refresh) { actions.onAgain(turn.id) }
+                    // What arrived before a stop is still worth keeping.
+                    if (answer.isNotEmpty() && !writing) CopyButton(answer)
+                }
                 turn.status == TurnStatus.DONE && answer.isNotEmpty() && !writing -> AnswerActions(answer, canReplace, actions)
             }
         }
@@ -432,16 +445,32 @@ private fun AnswerActions(answer: String, canReplace: Boolean, actions: Assistan
     }
     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (canReplace) PillButton("바꿔 넣기", filled = true) { actions.onReplace(answer) }
-        PillButton(if (copied) "복사됨" else "복사", filled = false, icon = if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy) {
-            clipboard.setText(AnnotatedString(answer))
-            copied = true
-        }
+        CopyButton(answer)
     }
 }
 
-private fun statusNote(turn: AssistantTurn): String? = when (turn.status) {
-    TurnStatus.QUEUED -> if (turn.images.size > turn.attached.size) "사진 올리는 중 ${turn.attached.size}/${turn.images.size}"
-        else "앞 질문이 끝나면 보낼게요"
+@Composable
+private fun CopyButton(text: String) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1_600)
+            copied = false
+        }
+    }
+    PillButton(if (copied) "복사됨" else "복사", filled = false, icon = if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy) {
+        clipboard.setText(AnnotatedString(text))
+        copied = true
+    }
+}
+
+private fun statusNote(turn: AssistantTurn, behindAnother: Boolean): String? = when (turn.status) {
+    TurnStatus.QUEUED -> when {
+        turn.images.size > turn.attached.size -> "사진 올리는 중 ${turn.attached.size}/${turn.images.size}"
+        behindAnother -> "앞 질문이 끝나면 보낼게요"
+        else -> null
+    }
     TurnStatus.UNKNOWN -> "연결이 끊겼어요. 질문이 닿았는지 확인하고 있어요"
     TurnStatus.STOPPED -> "멈췄어요"
     TurnStatus.FAILED -> turn.error ?: "답변을 받지 못했어요"
@@ -524,9 +553,9 @@ private fun Footer(
 private fun ModelChip(models: ModelChoice, actions: AssistantActions) {
     var open by remember { mutableStateOf(false) }
     var browsing by remember { mutableStateOf(false) }
-    val sheen = flowing(4_200, "model")
     val setup = models.setup
     val custom = setup.model != null || setup.effort != null
+    val sheen = flowing(4_200, "model", running = custom)
     Box {
         Row(
             Modifier.clip(RoundedCornerShape(16.dp))
@@ -776,8 +805,10 @@ private fun InputPill(
     actions: AssistantActions,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val flow = flowing(5_000, "field")
-    val sheen = flowing(3_600, "send")
+    val enabled = draft.isNotBlank() || hasPhotos
+    // The light only runs where it is drawn: the field's edge while typing, the send button when it can send.
+    val flow = flowing(5_000, "field", running = focused)
+    val sheen = flowing(3_600, "send", running = enabled)
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     val view = LocalView.current
@@ -820,7 +851,6 @@ private fun InputPill(
                 contentAlignment = Alignment.Center,
             ) { Box(Modifier.size(13.dp).clip(RoundedCornerShape(3.dp)).background(Rose.Deep)) }
         } else {
-            val enabled = draft.isNotBlank() || hasPhotos
             val press = remember { MutableInteractionSource() }
             val pressed by press.collectIsPressedAsState()
             val scale by animateFloatAsState(if (pressed) 0.94f else 1f, tween(140), label = "send")

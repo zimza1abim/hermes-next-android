@@ -40,6 +40,8 @@ class AssistantController private constructor(private val context: Context) {
     /** Every signed-in provider's models, read when the user browses beyond the favourites. */
     val catalog = MutableStateFlow(Catalog())
     private var favouritesRead: SignInGate.Handle? = null
+    /** Favourites are read once the socket is up, so the read never queues ahead of the ticket. */
+    private var favouritesDue = false
     private var catalogRead: SignInGate.Handle? = null
 
     fun chooseModel(choice: AssistantModel?) {
@@ -120,6 +122,17 @@ class AssistantController private constructor(private val context: Context) {
      */
     fun openFresh() {
         dispatch(AssistantInput.NewChat)
+        mode.value = AssistantMode.ASK
+        // Photos picked for a chat that was left are not carried into the new one.
+        pendingImages.value = emptyList()
+        trimImages()
+        favouritesDue = true
+        refreshFavouritesWhenReady()
+    }
+
+    private fun refreshFavouritesWhenReady() {
+        if (!favouritesDue || _state.value.link != AssistantLink.Ready) return
+        favouritesDue = false
         refreshFavourites()
     }
 
@@ -144,8 +157,8 @@ class AssistantController private constructor(private val context: Context) {
                 if (prepared == null) return@post
                 val id = UUID.randomUUID().toString()
                 images[id] = prepared
-                while (images.size > MAX_KEPT) images.remove(images.keys.first { it !in pendingImages.value })
                 pendingImages.value = pendingImages.value + id
+                trimImages()
             }
         }
     }
@@ -156,11 +169,20 @@ class AssistantController private constructor(private val context: Context) {
 
     fun thumbnail(id: String): ImageBitmap? = images[id]?.thumbnail
 
+    /** Keeps only photos still to be sent or shown in this chat; each holds its upload bytes. */
+    private fun trimImages() {
+        val used = pendingImages.value.toSet() + _state.value.turns.flatMap { it.images }
+        images.keys.retainAll(used)
+    }
+
     fun stop() = dispatch(AssistantInput.Stop)
 
     fun again(turnId: String) = dispatch(AssistantInput.Again(turnId, UUID.randomUUID().toString()))
 
-    fun newChat() = dispatch(AssistantInput.NewChat)
+    fun newChat() {
+        dispatch(AssistantInput.NewChat)
+        trimImages()
+    }
 
     fun retry() = dispatch(AssistantInput.Retry)
 
@@ -177,6 +199,7 @@ class AssistantController private constructor(private val context: Context) {
                 effects.forEach(::execute)
             }
             syncShown()
+            refreshFavouritesWhenReady()
         } finally {
             dispatching = false
         }
@@ -222,7 +245,6 @@ class AssistantController private constructor(private val context: Context) {
         private const val KEY_MODEL = "model"
         private const val KEY_EFFORT = "effort"
         private const val KEY_FAVOURITES = "favourites"
-        private const val MAX_KEPT = 24
         const val PHOTO_ONLY_PROMPT = "이 사진을 보고 무엇인지 설명해 줘."
 
         fun promptFor(mode: AssistantMode, text: String): String = when (mode) {

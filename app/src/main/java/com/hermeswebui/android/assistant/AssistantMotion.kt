@@ -75,8 +75,9 @@ internal val LocalCalmMotion = staticCompositionLocalOf { false }
 
 /** 0 to 1 over [periodMs], repeating; stays 0 in calm motion. Read it only while drawing. */
 @Composable
-internal fun flowing(periodMs: Int, label: String): State<Float> {
-    if (LocalCalmMotion.current) return remember { mutableFloatStateOf(0f) }
+internal fun flowing(periodMs: Int, label: String, running: Boolean = true): State<Float> {
+    // A stopped light asks for no frames at all; an unread infinite transition would still tick every frame.
+    if (LocalCalmMotion.current || !running) return remember { mutableFloatStateOf(0f) }
     return rememberInfiniteTransition(label = label)
         .animateFloat(0f, 1f, infiniteRepeatable(tween(periodMs, easing = LinearEasing)), label = label)
 }
@@ -309,14 +310,16 @@ internal fun ThinkingIndicator() {
  * The part of [target] to show now. Chunks arrive in bursts; the text on screen flows at a calm,
  * steady pace measured in time, not frames (so a 120 Hz screen is not twice as fast): about
  * [BASE_CPS] characters a second, speeding up gently only when far behind, up to [MAX_CPS].
- * A turn that is not live, or calm motion, shows everything at once.
+ * Calm motion shows everything at once.
  */
 @Composable
-internal fun smoothReveal(key: String, target: String, live: Boolean): String {
+internal fun smoothReveal(key: String, target: String): String {
     val calm = LocalCalmMotion.current
-    val shown = remember(key) { mutableIntStateOf(if (live && !calm) 0 else target.length) }
+    // Text already there when this first composes (a reopened panel, an item scrolled back into view) is
+    // shown at once; only text that arrives later is revealed.
+    val shown = remember(key) { mutableIntStateOf(target.length) }
     val latest by rememberUpdatedState(target)
-    val onScreen = remember(key) { arrayOf("") }
+    val onScreen = remember(key) { arrayOf(target) }
     LaunchedEffect(key, target.length, calm) {
         if (calm) {
             shown.intValue = target.length
@@ -327,11 +330,13 @@ internal fun smoothReveal(key: String, target: String, live: Boolean): String {
         while (true) {
             val goal = latest
             var at = shown.intValue.coerceAtMost(goal.length)
-            // A final text that replaced the streamed one restarts from where the two still agree.
-            if (at > 0 && !goal.startsWith(onScreen[0].take(at))) at = 0
+            // A final text that replaced the streamed one continues from where the two still agree.
+            if (goal !== onScreen[0]) {
+                if (at > 0 && !goal.regionMatches(0, onScreen[0], 0, at)) at = goal.commonPrefixWith(onScreen[0]).length.coerceAtMost(at)
+                onScreen[0] = goal
+            }
             if (at >= goal.length) {
                 shown.intValue = goal.length
-                onScreen[0] = goal
                 break
             }
             val now = withFrameNanos { it }
@@ -344,7 +349,6 @@ internal fun smoothReveal(key: String, target: String, live: Boolean): String {
             var next = (at + step).coerceAtMost(goal.length)
             if (next < goal.length && Character.isHighSurrogate(goal[next - 1])) next++
             shown.intValue = next
-            onScreen[0] = goal.take(next)
         }
     }
     return target.take(shown.intValue.coerceAtMost(target.length))
