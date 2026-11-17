@@ -49,7 +49,11 @@ class ChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         HermesFonts.preload(applicationContext)
         captureUri = savedInstanceState?.getString(STATE_CAPTURE)?.let(Uri::parse)
-        pane.value = savedInstanceState?.getString(STATE_PANE)?.let { name -> Pane.entries.firstOrNull { it.name == name } } ?: Pane.LIST
+        val restored = savedInstanceState?.getString(STATE_PANE)?.let { name -> Pane.entries.firstOrNull { it.name == name } } ?: Pane.LIST
+        // After the process was killed the chat itself is gone, so its screen would open blank: the list shows instead.
+        val chatGone = restored == Pane.CHAT && controller.state.value.let { it.storedId == null && it.turns.isEmpty() && !it.opening }
+        pane.value = if (chatGone) Pane.LIST else restored
+        load(pane.value)
         nativeHome.value = NativeHome.enabled(this)
         if (savedInstanceState != null) tab.value = savedInstanceState.getString(STATE_TAB)
         controller.loadAvatars()
@@ -119,7 +123,7 @@ class ChatActivity : ComponentActivity() {
                 edit(row) { null }
                 admin.changeChat(row, ChatChange(archived = true)) { ok -> settled(if (ok) "보관했어요. 메뉴의 보관한 대화에 있어요" else "보관하지 못했어요") }
             },
-            onPoll = controller::refreshChats,
+            onPoll = { if (!controller.chatsLoading.value) controller.refreshChats() },
             onNoticeShown = { listNotice.value = null },
             onBackToList = {
                 pane.value = Pane.LIST
@@ -249,7 +253,9 @@ class ChatActivity : ComponentActivity() {
             onStop = controller::stop,
             onAgain = controller::again,
             onClose = { pane.value = Pane.LIST },
-            onNewChat = { controller.selectProfile(controller.state.value.profile) },
+            onNewChat = {
+                if (!controller.selectProfile(controller.state.value.profile, leave = true)) listNotice.value = NOT_SENT_YET
+            },
             onRetry = controller::retry,
             onApprove = controller::approve,
             onOpenApp = ::openApp,

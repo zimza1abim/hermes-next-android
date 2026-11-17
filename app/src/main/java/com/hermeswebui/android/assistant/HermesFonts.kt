@@ -67,6 +67,8 @@ object HermesFonts {
      * next start needs neither the package list nor the font's package. Call off the main thread;
      * returns false when the font could not be read, leaving the current one.
      */
+    /** One pick at a time: two quick taps must not interleave their copies of the same file. */
+    @Synchronized
     fun pick(context: Context, choice: FontChoice?): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val file = File(context.filesDir, FILE)

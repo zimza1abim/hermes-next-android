@@ -411,4 +411,66 @@ class AssistantMachineTest {
         assertThat(SlashCommand.parse("not a command")).isNull()
         assertThat(SlashCommand.parse("/ path")).isNull()
     }
+
+    @Test
+    fun `another chat ending does not clear the approval waiting in this one`() {
+        connect()
+        ask("q")
+        created()
+        feed(reply("prompt.submit"))
+        val approval = com.hermeswebui.android.webapp.GatewayEvent.ApprovalRequested("live-1", com.hermeswebui.android.webapp.RpcId.of(77)!!,
+            "r1", "rm -rf tmp", null, null, listOf(com.hermeswebui.android.webapp.ApprovalChoice.ONCE, com.hermeswebui.android.webapp.ApprovalChoice.DENY))
+        feed(frame(AssistantFrame.Request(approval)))
+        feed(frame(AssistantFrame.Completed("left-chat", TurnOutcome.COMPLETE, "other", null)))
+        assertThat(state.requests).hasSize(1)
+        feed(frame(AssistantFrame.Completed("live-1", TurnOutcome.COMPLETE, "done", null)))
+        assertThat(state.requests).isEmpty()
+    }
+
+    @Test
+    fun `a question typed while a chat opens keeps the chat's earlier messages`() {
+        connect()
+        feed(AssistantInput.OpenChat("stored-9", null))
+        ask("new question")
+        val history = listOf(HistoryRow(HistoryRole.USER, "old q"), HistoryRow(HistoryRole.ASSISTANT, "old a"))
+        feed(reply("session.resume") { copy(sessionId = "live-9", storedId = "stored-9", history = history) })
+        assertThat(state.history).isEqualTo(history)
+        assertThat(lastCall("prompt.submit").getJSONObject("params").getString("text")).isEqualTo("new question")
+    }
+
+    @Test
+    fun `a question the transcript never received stops holding the chat`() {
+        connect(authority = false)
+        ask("lost")
+        created()
+        feed(AssistantInput.Closed(gen()))
+        assertThat(state.turns.single().status).isEqualTo(TurnStatus.UNKNOWN)
+        reconnect(false)
+        feed(reply("session.resume") { copy(sessionId = "live-2", storedId = "stored-1", running = false, lastQuestion = "something else", lastAnswer = "x") })
+        assertThat(state.turns.single().status).isEqualTo(TurnStatus.FAILED)
+        assertThat(state.busy).isFalse()
+    }
+
+    @Test
+    fun `asking a failed command again resolves it as a command`() {
+        connect()
+        feed(AssistantInput.Ask("t1", AssistantMode.ASK, "/notes x", "/notes x"))
+        created()
+        feed(reply("command.dispatch") { copy(errorCode = 5000, errorMessage = "boom") })
+        assertThat(state.turns.single().status).isEqualTo(TurnStatus.FAILED)
+        feed(AssistantInput.Again("t1", "t2"))
+        assertThat(lastCall("command.dispatch").getJSONObject("params").getString("name")).isEqualTo("notes")
+        assertThat(sent.none { it.optString("method") == "prompt.submit" }).isTrue()
+    }
+
+    @Test
+    fun `a failed slash list read can be read again`() {
+        connect()
+        feed(AssistantInput.LoadSlash)
+        feed(reply("commands.catalog") { copy(errorCode = 5020, errorMessage = "busy") })
+        assertThat(state.slash.items).isNull()
+        assertThat(state.slash.failed).isTrue()
+        feed(AssistantInput.LoadSlash)
+        assertThat(sent.count { it.optString("method") == "commands.catalog" }).isEqualTo(2)
+    }
 }

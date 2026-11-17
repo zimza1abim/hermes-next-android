@@ -155,7 +155,7 @@ internal fun ChatScreen(
             DotGrid(Modifier.fillMaxWidth().height(180.dp))
             Column(Modifier.fillMaxSize().statusBarsPadding().windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))) {
                 when (view.pane) {
-                    Pane.CHAT -> ChatPane(state, draft, mode, photos, preparing, models, actions, bot, chats.onBackToList, chats.onNew)
+                    Pane.CHAT -> ChatPane(state, draft, mode, photos, preparing, models, actions, bot, chats.onBackToList, actions.onNewChat)
                     Pane.LIST -> ListPane(state, actions, view, chats)
                     else -> MenuPanes(view.pane, menu, menuActions)
                 }

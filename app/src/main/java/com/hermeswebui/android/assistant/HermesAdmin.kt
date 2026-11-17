@@ -259,9 +259,15 @@ class HermesAdmin(context: Context) {
         } ?: run { notice.value = "서버가 설정되지 않았어요" }
     }
 
+    /** The newest read of each list; an older reply (another bot's, say) does not overwrite it. */
+    private val reads = mutableMapOf<MutableStateFlow<*>, Int>()
+
     private fun <T> read(target: MutableStateFlow<Listing<T>>, path: String, parse: (Any?) -> List<T>?) {
         target.value = target.value.copy(loading = true, failed = false)
+        val read = (reads[target] ?: 0) + 1
+        reads[target] = read
         call("GET", path) { reply ->
+            if (reads[target] != read) return@call
             val rows = parse(reply)
             target.value = if (rows == null) target.value.copy(loading = false, failed = true) else Listing(rows)
         } ?: run { target.value = target.value.copy(loading = false, failed = true) }

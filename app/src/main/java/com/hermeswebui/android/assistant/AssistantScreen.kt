@@ -887,6 +887,11 @@ private fun SlashMenu(draft: String, slash: SlashCatalog, actions: AssistantActi
                 .clip(shape).background(Rose.Panel).border(1.dp, Rose.Border, shape),
         ) {
             when {
+                items == null && slash.failed && !slash.loading -> Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("명령을 읽지 못했어요", style = RoseType.Label, modifier = Modifier.weight(1f))
+                    PillButton("다시", filled = false, onClick = actions.onSlash)
+                }
                 items == null -> Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     ThinkingIndicator()
                     Text("명령을 읽는 중", style = RoseType.Label, modifier = Modifier.padding(start = 10.dp))

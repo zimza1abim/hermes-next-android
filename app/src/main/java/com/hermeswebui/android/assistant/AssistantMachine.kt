@@ -145,7 +145,14 @@ sealed interface PendingCall {
 data class SlashItem(val name: String, val description: String, val group: String)
 
 /** The slash menu of one profile; [items] is null until it was read. */
-data class SlashCatalog(val profile: String? = null, val items: List<SlashItem>? = null, val loading: Boolean = false, val due: Boolean = false)
+data class SlashCatalog(
+    val profile: String? = null,
+    val items: List<SlashItem>? = null,
+    val loading: Boolean = false,
+    val due: Boolean = false,
+    /** The last read failed; opening the menu again reads again. */
+    val failed: Boolean = false,
+)
 
 data class AssistantState(
     val gen: Int = 0,
@@ -292,7 +299,12 @@ object AssistantMachine {
         is AssistantInput.Again -> {
             val old = state.turns.firstOrNull { it.id == input.turnId && (it.status == TurnStatus.FAILED || it.status == TurnStatus.STOPPED) }
             if (old == null || state.turns.any { it.id == input.newId }) state to emptyList()
-            else state.copy(turns = state.turns - old + AssistantTurn(input.newId, old.mode, old.question, old.prompt, images = old.images, setup = old.setup)) to emptyList()
+            else {
+                // A slash command is resolved by the server again, not sent as text.
+                val command = old.mode == AssistantMode.ASK && old.images.isEmpty() && SlashCommand.parse(old.question) != null
+                state.copy(turns = state.turns - old + AssistantTurn(input.newId, old.mode, old.question, if (command) old.question else old.prompt,
+                    images = old.images, setup = old.setup, command = command)) to emptyList()
+            }
         }
         AssistantInput.NewChat -> if (state.busy) state to emptyList()
             else state.copy(runtimeId = null, storedId = null, turns = emptyList(), requests = emptyList(),
@@ -457,7 +469,14 @@ object AssistantMachine {
     }
 
     private fun stop(state: AssistantState): Pair<AssistantState, List<AssistantEffect>> {
-        val queued = state.turns.map { if (it.status == TurnStatus.QUEUED) it.copy(status = TurnStatus.STOPPED) else it }
+        // A question that may not have arrived is given up too; it would otherwise hold the chat.
+        val queued = state.turns.map {
+            when (it.status) {
+                TurnStatus.QUEUED -> it.copy(status = TurnStatus.STOPPED)
+                TurnStatus.UNKNOWN -> it.copy(status = TurnStatus.FAILED, error = "보냈는지 확인하지 못했어요")
+                else -> it
+            }
+        }
         val sessionId = state.runtimeId
         if (state.activeTurn == null || sessionId == null || state.link != AssistantLink.Ready) return state.copy(turns = queued) to emptyList()
         val id = state.nextId
@@ -526,7 +545,7 @@ object AssistantMachine {
                 }
                 turn.copy(status = status, final = frame.text?.takeIf { it.isNotBlank() } ?: turn.final,
                     error = frame.error.takeIf { status == TurnStatus.FAILED })
-            }.let { (next, effects) -> next.copy(requests = emptyList()) to effects }
+            }.let { (next, effects) -> (if (frame.sessionId == state.runtimeId) next.copy(requests = emptyList()) else next) to effects }
             is AssistantFrame.Request -> if (frame.request.sessionId != state.runtimeId || state.requests.any { it.rpcId == frame.request.rpcId }) state to emptyList()
                 else state.copy(requests = state.requests + frame.request) to emptyList()
             is AssistantFrame.Withdrawn -> if (frame.sessionId != state.runtimeId) state to emptyList()
@@ -545,7 +564,10 @@ object AssistantMachine {
             PendingCall.Capabilities, PendingCall.Interrupt -> base to emptyList()
             is PendingCall.Catalog -> {
                 if (base.slash.profile != call.profile) base to emptyList()
-                else base.copy(slash = base.slash.copy(loading = false, items = frame.result?.let(AssistantProtocol::slashCatalog) ?: base.slash.items ?: emptyList())) to emptyList()
+                else {
+                    val items = frame.result?.takeIf { frame.ok }?.let(AssistantProtocol::slashCatalog)
+                    base.copy(slash = base.slash.copy(loading = false, items = items ?: base.slash.items, failed = items == null)) to emptyList()
+                }
             }
             is PendingCall.Dispatch -> dispatched(base, call, frame)
             is PendingCall.SlashExec -> base.copy(turns = base.turns.update(call.turnId) {
@@ -595,9 +617,10 @@ object AssistantMachine {
             }) to emptyList()
         }
         val attached = state.copy(runtimeId = frame.sessionId, storedId = frame.storedId ?: state.storedId, opening = false)
-        // The transcript already holds this screen's own turns, so it is taken only for a chat just opened.
-        val next = if (state.turns.isNotEmpty() || frame.history == null) attached
-            else attached.copy(history = frame.history).let { if (frame.running == true) watching(it, frame.sessionId) else it }
+        // The transcript already holds this screen's own turns after a reconnect, so it is taken only for a
+        // chat just opened. A question typed while it opened is not sent yet, so it is not in the transcript.
+        val next = if ((state.turns.isNotEmpty() && !state.opening) || frame.history == null) attached
+            else attached.copy(history = frame.history).let { if (frame.running == true && it.turns.isEmpty()) watching(it, frame.sessionId) else it }
         val turn = next.activeTurn ?: return next to emptyList()
         val running = frame.running == true
         return when {
@@ -606,7 +629,8 @@ object AssistantMachine {
             turn.status == TurnStatus.UNKNOWN ->
                 if (frame.lastQuestion?.trim() == turn.prompt.trim() && frame.lastAnswer != null)
                     next.copy(turns = next.turns.update(turn.id) { it.copy(status = TurnStatus.DONE, final = frame.lastAnswer) }) to emptyList()
-                else next to emptyList()
+                // Not in the transcript: it never arrived. It ends here, so the chat is not held by it.
+                else next.copy(turns = next.turns.update(turn.id) { it.copy(status = TurnStatus.FAILED, error = "보내지 못했어요. 다시 보내 주세요") }) to emptyList()
             running -> next to emptyList()
             else -> next.copy(turns = next.turns.update(turn.id) {
                 it.copy(status = TurnStatus.DONE, final = frame.lastAnswer ?: it.final ?: it.answer.ifEmpty { null })
@@ -620,7 +644,8 @@ object AssistantMachine {
      */
     private fun watching(state: AssistantState, sessionId: String): AssistantState =
         if (sessionId != state.runtimeId || state.activeTurn != null) state
-        else state.copy(turns = (state.turns + AssistantTurn("remote-${state.nextId}-${state.turns.size}", AssistantMode.ASK, "", "",
+        // nextId is spent on it, so two turns started elsewhere never share an id (a list key).
+        else state.copy(nextId = state.nextId + 1, turns = (state.turns + AssistantTurn("remote-${state.nextId}", AssistantMode.ASK, "", "",
             status = TurnStatus.STREAMING)).takeLast(MAX_TURNS))
 
     /** Applies [change] to the running turn when [sessionId] is this panel's chat. */

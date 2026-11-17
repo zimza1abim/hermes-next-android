@@ -251,6 +251,7 @@ class AssistantController private constructor(private val context: Context, priv
     private var chatsRead: SignInGate.Handle? = null
 
     private val chatsWaiters = mutableListOf<() -> Unit>()
+    private var chatsReads = 0
 
     /** Reads the list again. [done] runs when a read ends, also when a newer read replaced this one. */
     fun refreshChats(done: (() -> Unit)? = null) {
@@ -263,7 +264,10 @@ class AssistantController private constructor(private val context: Context, priv
         }
         chatsRead?.cancel()
         chatsLoading.value = true
+        // A reply already queued when a newer read replaced it is dropped; only the newest one lands.
+        val read = ++chatsReads
         chatsRead = readApi(AssistantProtocol.SIDEBAR_PATH) { reply ->
+            if (read != chatsReads) return@readApi
             reply?.let(AssistantProtocol::sidebar)?.let { chats.value = decorate(it) }
             finished()
         } ?: run { finished(); null }
