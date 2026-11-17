@@ -113,6 +113,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.rounded.TextFields
@@ -153,6 +162,8 @@ internal class AssistantActions(
     val onTakePhoto: () -> Unit,
     val onRemovePhoto: (String) -> Unit,
     val thumbnail: (String) -> ImageBitmap?,
+    /** The slash menu opened: read its rows if they are not there yet. */
+    val onSlash: () -> Unit = {},
 )
 
 @Composable
@@ -840,7 +851,79 @@ internal fun Footer(
             if (conversation) ModeChips(mode, actions.onMode)
         }
         if (!conversation) ModeChips(mode, actions.onMode)
+        SlashMenu(draft, state.slash, actions)
         InputPill(state.activeTurn != null, draft, mode, photos.isNotEmpty(), onAttach = { tray = !tray }, onSent = { tray = false }, actions)
+    }
+}
+
+/** Whether [draft] is a command name being typed: `/` and a name, no space yet. */
+internal fun slashQuery(draft: String): String? = draft.takeIf { it.startsWith("/") && it.none { c -> c.isWhitespace() } }
+
+/**
+ * Commands, plugins and skills for a `/` at the start of the field, filtered as the name is typed. The
+ * rows are read once per bot and filtered here, so typing never waits on the server. Picking one puts
+ * `/name ` in the field.
+ */
+@Composable
+private fun SlashMenu(draft: String, slash: SlashCatalog, actions: AssistantActions) {
+    val query = slashQuery(draft)
+    val open = query != null
+    LaunchedEffect(open) { if (open) actions.onSlash() }
+    val items = slash.items
+    val rows = remember(items, query) { if (items == null || query == null) emptyList() else AssistantProtocol.filterSlash(items, query) }
+    // The last rows stay drawn while the menu folds away, so it does not empty before it closes.
+    var shown by remember { mutableStateOf(rows) }
+    if (open) shown = rows
+    val calm = LocalCalmMotion.current
+    AnimatedVisibility(
+        visible = open,
+        enter = if (calm) EnterTransition.None else fadeIn(tween(140)) + expandVertically(tween(200, easing = FastOutSlowInEasing), expandFrom = Alignment.Bottom),
+        exit = if (calm) ExitTransition.None else fadeOut(tween(120)) + shrinkVertically(tween(160), shrinkTowards = Alignment.Bottom),
+    ) {
+        val shape = RoundedCornerShape(22.dp)
+        Column(
+            Modifier.padding(bottom = 10.dp).fillMaxWidth()
+                .shadow(10.dp, shape, ambientColor = Lilac.copy(alpha = 0.25f), spotColor = Lilac.copy(alpha = 0.25f))
+                .clip(shape).background(Rose.Panel).border(1.dp, Rose.Border, shape),
+        ) {
+            when {
+                items == null -> Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ThinkingIndicator()
+                    Text("명령을 읽는 중", style = RoseType.Label, modifier = Modifier.padding(start = 10.dp))
+                }
+                shown.isEmpty() -> Text("맞는 명령이 없어요", style = RoseType.Label, modifier = Modifier.padding(16.dp))
+                else -> LazyColumn(Modifier.heightIn(max = 264.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    itemsIndexed(shown, key = { _, item -> item.name }) { index, item ->
+                        if (index == 0 || shown[index - 1].group != item.group) {
+                            Text(item.group, style = RoseType.Meta.copy(color = Rose.ChipText, fontWeight = FontWeight.Bold),
+                                modifier = Modifier.padding(start = 16.dp, top = if (index == 0) 4.dp else 10.dp, bottom = 2.dp))
+                        }
+                        SlashRow(item, query.orEmpty()) { actions.onDraft(item.name + " ") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlashRow(item: SlashItem, query: String, onPick: () -> Unit) {
+    val typed = query.removePrefix("/")
+    val name = remember(item.name, typed) {
+        buildAnnotatedString {
+            append(item.name)
+            val at = item.name.indexOf(typed, ignoreCase = true).takeIf { typed.isNotEmpty() && it > 0 }
+            if (at != null) addStyle(SpanStyle(color = Rose.Deep, fontWeight = FontWeight.Bold), at, at + typed.length)
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onPick).heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(name, fontFamily = FontFamily.Monospace, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Rose.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (item.description.isNotBlank()) Text(item.description, style = RoseType.Label.copy(fontSize = 12.5.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -1101,6 +1184,9 @@ private fun InputPill(
     actions: AssistantActions,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // The field keeps its own cursor; a draft set from outside (a picked command) puts it at the end.
+    var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
+    if (field.text != draft) field = TextFieldValue(draft, TextRange(draft.length))
     val enabled = draft.isNotBlank() || hasPhotos
     // The light only runs where it is drawn: the field's edge while typing, the send button when it can send.
     val flow = flowing(5_000, "field", running = focused)
@@ -1124,8 +1210,11 @@ private fun InputPill(
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Rounded.Add, null, tint = Rose.Deep, modifier = Modifier.size(20.dp)) }
         BasicTextField(
-            value = draft,
-            onValueChange = actions.onDraft,
+            value = field,
+            onValueChange = {
+                field = it
+                if (it.text != draft) actions.onDraft(it.text)
+            },
             textStyle = RoseType.Body,
             cursorBrush = SolidColor(Rose.Deep),
             maxLines = 5,

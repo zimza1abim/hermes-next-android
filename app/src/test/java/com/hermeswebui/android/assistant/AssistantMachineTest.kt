@@ -354,4 +354,61 @@ class AssistantMachineTest {
         assertThat(state.storedId).isNull()
         assertThat(state.title).isNull()
     }
+
+    @Test
+    fun `a skill command is resolved by the server and its message is sent as the prompt`() {
+        connect()
+        feed(AssistantInput.Ask("t1", AssistantMode.ASK, "/summarize the notes", "/summarize the notes"))
+        created()
+        val dispatch = lastCall("command.dispatch").getJSONObject("params")
+        assertThat(dispatch.getString("name")).isEqualTo("summarize")
+        assertThat(dispatch.getString("arg")).isEqualTo("the notes")
+        assertThat(sent.none { it.optString("method") == "prompt.submit" }).isTrue()
+        feed(reply("command.dispatch") { copy(result = org.json.JSONObject("""{"type":"skill","message":"Skill body: the notes"}""")) })
+        assertThat(lastCall("prompt.submit").getJSONObject("params").getString("text")).isEqualTo("Skill body: the notes")
+        // The bubble keeps what was typed.
+        assertThat(state.turns.single().question).isEqualTo("/summarize the notes")
+    }
+
+    @Test
+    fun `a built-in the dispatcher leaves alone runs through slash exec and shows its output`() {
+        connect()
+        feed(AssistantInput.Ask("t1", AssistantMode.ASK, "/help", "/help"))
+        created()
+        feed(reply("command.dispatch") { copy(errorCode = AssistantProtocol.NOT_DISPATCHABLE, errorMessage = "not a quick/plugin/bundle/skill command") })
+        assertThat(lastCall("slash.exec").getJSONObject("params").getString("command")).isEqualTo("/help")
+        feed(reply("slash.exec") { copy(result = org.json.JSONObject("""{"output":"Commands: ..."}""")) })
+        assertThat(state.turns.single().status).isEqualTo(TurnStatus.DONE)
+        assertThat(state.turns.single().answer).isEqualTo("Commands: ...")
+    }
+
+    @Test
+    fun `the slash menu is read once per bot`() {
+        connect()
+        feed(AssistantInput.LoadSlash)
+        assertThat(sent.count { it.optString("method") == "commands.catalog" }).isEqualTo(1)
+        feed(AssistantInput.LoadSlash)
+        assertThat(sent.count { it.optString("method") == "commands.catalog" }).isEqualTo(1)
+        feed(reply("commands.catalog") { copy(result = org.json.JSONObject("""{"pairs":[["/help","Show help"],["/notes","Take notes"],["/draw","Draw"]],
+            "skills":{"/notes":{"usage":3},"/draw":{"usage":0}},"categories":[{"name":"Info","pairs":[["/help","Show help"]]},
+            {"name":"Session","pairs":[["/clear","Clear"]]},{"name":"Plugin commands","pairs":[["/zap","Zap"]]}]}""")) })
+        // By kind (skills, plugins, built-ins), each in alphabetical order.
+        assertThat(state.slash.items?.map { it.name }).containsExactly("/draw", "/notes", "/zap", "/clear", "/help").inOrder()
+        assertThat(state.slash.items?.map { it.group }?.distinct()).containsExactly("스킬", "플러그인", "기본 명령").inOrder()
+        feed(AssistantInput.LoadSlash)
+        assertThat(sent.count { it.optString("method") == "commands.catalog" }).isEqualTo(1)
+    }
+
+    @Test
+    fun `typed text filters the slash rows and keeps their order`() {
+        val items = listOf(SlashItem("/help", "Show help", "Info"), SlashItem("/whelp", "x", "Info"), SlashItem("/notes", "help with notes", "스킬"))
+        assertThat(AssistantProtocol.filterSlash(items, "/he").map { it.name }).containsExactly("/help", "/whelp", "/notes").inOrder()
+        assertThat(AssistantProtocol.filterSlash(items, "/not").map { it.name }).containsExactly("/notes")
+        assertThat(AssistantProtocol.filterSlash(items, "/").map { it.name }).containsExactly("/help", "/whelp", "/notes").inOrder()
+        assertThat(slashQuery("/he")).isEqualTo("/he")
+        assertThat(slashQuery("/help me")).isNull()
+        assertThat(SlashCommand.parse("/notes a b")).isEqualTo(SlashCommand("notes", "a b"))
+        assertThat(SlashCommand.parse("not a command")).isNull()
+        assertThat(SlashCommand.parse("/ path")).isNull()
+    }
 }

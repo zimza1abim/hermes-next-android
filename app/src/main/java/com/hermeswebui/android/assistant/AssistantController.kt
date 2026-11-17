@@ -142,7 +142,8 @@ class AssistantController private constructor(private val context: Context, priv
         val text = question.trim()
         val photos = pendingImages.value
         if (text.isEmpty() && photos.isEmpty()) return
-        val prompt = if (text.isEmpty()) PHOTO_ONLY_PROMPT else promptFor(mode, text)
+        // A slash command goes as typed; the server decides what it becomes.
+        val prompt = if (text.isEmpty()) PHOTO_ONLY_PROMPT else if (mode == AssistantMode.ASK && photos.isEmpty() && SlashCommand.parse(text) != null) text else promptFor(mode, text)
         pendingImages.value = emptyList()
         dispatch(AssistantInput.Ask(UUID.randomUUID().toString(), mode, text, prompt, photos, setup.value))
     }
@@ -186,6 +187,9 @@ class AssistantController private constructor(private val context: Context, priv
     }
 
     fun retry() = dispatch(AssistantInput.Retry)
+
+    /** The slash menu opened; its rows are read once per bot and kept. */
+    fun loadSlash() = dispatch(AssistantInput.LoadSlash)
 
     fun refreshProfiles() = dispatch(AssistantInput.RefreshProfiles)
 
@@ -361,6 +365,7 @@ class AssistantController private constructor(private val context: Context, priv
             is AssistantEffect.Close -> socket.close(effect.gen)
             is AssistantEffect.RetryAfter -> socket.retryAfter(effect.gen, effect.delayMs)
             is AssistantEffect.Avatar -> keepAvatar(effect.profile, effect.data)
+            is AssistantEffect.Prefill -> setDraft(effect.text)
             is AssistantEffect.LingerAfter -> handler.postDelayed({ dispatch(AssistantInput.LingerDue(effect.token)) }, effect.delayMs)
         }
     }

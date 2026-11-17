@@ -35,6 +35,8 @@ sealed interface AssistantFrame {
         val profiles: List<ProfileRow>? = null,
         /** A `profiles.get_asset` answer's image, as a data URL. */
         val asset: String? = null,
+        /** The whole `result` object, for replies read by their own fields (slash commands). */
+        val result: JSONObject? = null,
     ) : AssistantFrame {
         val ok: Boolean get() = errorCode == null && errorMessage == null
     }
@@ -100,6 +102,67 @@ object AssistantProtocol {
     fun resume(id: Int, authority: Boolean, storedId: String, profile: String? = null): String =
         call(id, "session.resume", profile, JSONObject().put("session_id", storedId)
             .apply { if (!authority) put("inline_images", false) })
+
+    /** `command.dispatch` refuses a built-in it does not run itself with this code; `slash.exec` runs it. */
+    const val NOT_DISPATCHABLE = 4018
+
+    /** Every slash command of [profile]: built-ins, user and plugin commands, and skills. */
+    fun commandsCatalog(id: Int, sessionId: String?, profile: String? = null): String =
+        call(id, "commands.catalog", profile, JSONObject().apply { sessionId?.let { put("session_id", it) } })
+
+    fun commandDispatch(id: Int, sessionId: String, name: String, arg: String, profile: String? = null): String =
+        call(id, "command.dispatch", profile, JSONObject().put("session_id", sessionId).put("name", name).put("arg", arg))
+
+    fun slashExec(id: Int, sessionId: String, command: String, profile: String? = null): String =
+        call(id, "slash.exec", profile, JSONObject().put("session_id", sessionId).put("command", command.trim()))
+
+    /**
+     * The menu rows of a `commands.catalog` result, by kind: skills, plugin commands, user commands, then
+     * the built-ins. Each kind is in alphabetical order, and each name appears once.
+     */
+    fun slashCatalog(result: JSONObject): List<SlashItem> {
+        val described = mutableMapOf<String, String>()
+        result.optJSONArray("pairs")?.let { pairs ->
+            for (i in 0 until pairs.length()) {
+                val pair = pairs.optJSONArray(i) ?: continue
+                val name = (pair.opt(0) as? String)?.takeIf { it.startsWith("/") } ?: continue
+                described.putIfAbsent(name, (pair.opt(1) as? String).orEmpty())
+            }
+        }
+        val kinds = linkedMapOf(SLASH_SKILLS to mutableListOf<SlashItem>(), SLASH_PLUGINS to mutableListOf(), SLASH_USER to mutableListOf(), SLASH_BUILT_IN to mutableListOf())
+        val seen = mutableSetOf<String>()
+        fun add(name: String, text: String, kind: String) {
+            if (seen.add(name)) kinds.getValue(kind) += SlashItem(name, text, kind)
+        }
+        result.optJSONObject("skills")?.keys()?.forEach { key ->
+            val name = if (key.startsWith("/")) key else "/$key"
+            add(name, described[name].orEmpty().ifEmpty { "Skill" }, SLASH_SKILLS)
+        }
+        val categories = result.optJSONArray("categories")
+        for (c in 0 until (categories?.length() ?: 0)) {
+            val group = categories?.optJSONObject(c) ?: continue
+            val kind = when (group.opt("name")) { "Plugin commands" -> SLASH_PLUGINS; "User commands" -> SLASH_USER; else -> SLASH_BUILT_IN }
+            val pairs = group.optJSONArray("pairs") ?: continue
+            for (i in 0 until pairs.length()) {
+                val pair = pairs.optJSONArray(i) ?: continue
+                val name = (pair.opt(0) as? String)?.takeIf { it.startsWith("/") } ?: continue
+                add(name, (pair.opt(1) as? String).orEmpty(), kind)
+            }
+        }
+        return kinds.values.flatMap { rows -> rows.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) }
+    }
+
+    const val SLASH_SKILLS = "스킬"
+    const val SLASH_PLUGINS = "플러그인"
+    const val SLASH_USER = "내 명령"
+    const val SLASH_BUILT_IN = "기본 명령"
+
+    /** The rows whose name or description contains what follows the `/`, in the menu's own order. */
+    fun filterSlash(items: List<SlashItem>, typed: String): List<SlashItem> {
+        val query = typed.removePrefix("/").trim()
+        if (query.isEmpty()) return items
+        return items.filter { it.name.contains(query, ignoreCase = true) || it.description.contains(query, ignoreCase = true) }
+    }
 
     fun interrupt(id: Int, sessionId: String, profile: String? = null): String =
         call(id, "session.interrupt", profile, JSONObject().put("session_id", sessionId))
@@ -175,6 +238,7 @@ object AssistantProtocol {
             history = messages?.let(::history),
             profiles = result.optJSONArray("profiles")?.let(::profiles),
             asset = (result.opt("data") as? String)?.takeIf { result.opt("found") == true && it.startsWith("data:image/") },
+            result = result,
             errorMessage = if (result.opt("attached") == false) text(result, "message") ?: "사진을 올리지 못했어요" else null,
         )
     }

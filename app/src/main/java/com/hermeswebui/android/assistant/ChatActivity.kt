@@ -258,6 +258,7 @@ class ChatActivity : ComponentActivity() {
             onTakePhoto = ::takePhoto,
             onRemovePhoto = controller::removeImage,
             thumbnail = controller::thumbnail,
+            onSlash = controller::loadSlash,
         )
     }
 

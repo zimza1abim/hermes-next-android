@@ -112,6 +112,11 @@ data class AssistantTurn(
     val attached: Map<String, ImageAttachment> = emptyMap(),
     /** What a chat this turn creates runs with. */
     val setup: ChatSetup = ChatSetup(),
+    /**
+     * A slash command still to be resolved by the server (`command.dispatch`); false once it became a
+     * prompt to send, or for an ordinary question.
+     */
+    val command: Boolean = false,
 ) {
     val answer: String get() = final ?: segments.toSortedMap().values.joinToString("\n\n")
 }
@@ -129,7 +134,18 @@ sealed interface PendingCall {
     data object Interrupt : PendingCall
     data object Profiles : PendingCall
     data class Avatar(val profile: String) : PendingCall
+    data class Catalog(val profile: String?) : PendingCall
+    /** `command.dispatch` for a slash turn; [hops] counts alias redirects. */
+    data class Dispatch(val turnId: String, val name: String, val hops: Int = 0) : PendingCall
+    /** `slash.exec` for a built-in the dispatcher does not run itself. */
+    data class SlashExec(val turnId: String) : PendingCall
 }
+
+/** One row of the slash menu: `/name`, what it does, and the group it is listed under. */
+data class SlashItem(val name: String, val description: String, val group: String)
+
+/** The slash menu of one profile; [items] is null until it was read. */
+data class SlashCatalog(val profile: String? = null, val items: List<SlashItem>? = null, val loading: Boolean = false, val due: Boolean = false)
 
 data class AssistantState(
     val gen: Int = 0,
@@ -161,6 +177,7 @@ data class AssistantState(
     val profilesDue: Boolean = false,
     /** The list id the open chat was picked by; the server may answer with another durable id. */
     val openedId: String? = null,
+    val slash: SlashCatalog = SlashCatalog(),
 ) {
     /** The selected bot's row, or the server's own. */
     val bot: ProfileRow? get() = profiles.firstOrNull { it.name == profile } ?: profiles.firstOrNull { it.own }
@@ -202,6 +219,8 @@ sealed interface AssistantInput {
     /** Starts a new chat with [name] (null: the server's own profile); ignored while a turn runs. */
     data class SelectProfile(val name: String?, val leave: Boolean = false) : AssistantInput
     data class Approve(val rpcId: RpcId, val allow: Boolean) : AssistantInput
+    /** The slash menu opened: its commands are read once per profile. */
+    data object LoadSlash : AssistantInput
     /** The user asks to reconnect now. */
     data object Retry : AssistantInput
     data object NetworkChanged : AssistantInput
@@ -229,6 +248,8 @@ sealed interface AssistantEffect {
     data class LingerAfter(val token: Int, val delayMs: Long) : AssistantEffect
     /** A bot's picture arrived, as a data URL; the shell decodes and keeps it. */
     data class Avatar(val profile: String, val data: String) : AssistantEffect
+    /** A command answered with text for the input field (`prefill`). */
+    data class Prefill(val text: String) : AssistantEffect
 }
 
 /**
@@ -240,6 +261,8 @@ sealed interface AssistantEffect {
  *  - Only events of this panel's chat change it.
  */
 object AssistantMachine {
+    private const val MAX_ALIAS_HOPS = 3
+
     private const val MAX_TURNS = 50
     /** How long a ready socket outlives the closed panel. Pings every 15 s keep it alive meanwhile. */
     const val LINGER_MS = 3 * 60 * 1_000L
@@ -261,7 +284,8 @@ object AssistantMachine {
         is AssistantInput.Ask -> {
             val text = input.question.trim()
             if ((text.isEmpty() && input.images.isEmpty()) || state.turns.any { it.id == input.id }) state to emptyList()
-            else state.copy(turns = (state.turns + AssistantTurn(input.id, input.mode, text, input.prompt, images = input.images, setup = input.setup))
+            else state.copy(turns = (state.turns + AssistantTurn(input.id, input.mode, text, input.prompt, images = input.images, setup = input.setup,
+                command = input.mode == AssistantMode.ASK && input.images.isEmpty() && SlashCommand.parse(text) != null))
                 .takeLast(MAX_TURNS)) to emptyList()
         }
         AssistantInput.Stop -> stop(state)
@@ -288,6 +312,11 @@ object AssistantMachine {
                 calls = state.calls.filterValues { it != PendingCall.Resume && it != PendingCall.Create }) to emptyList()
         }
         is AssistantInput.Approve -> approve(state, input)
+        AssistantInput.LoadSlash -> {
+            val slash = state.slash
+            val fresh = slash.profile == state.profile && (slash.items != null || slash.loading)
+            if (fresh) state to emptyList() else state.copy(slash = SlashCatalog(state.profile, due = true)) to emptyList()
+        }
         AssistantInput.Retry -> when (state.link) {
             is AssistantLink.Backoff, AssistantLink.SignedOut, AssistantLink.Unsupported -> mint(state, 0)
             else -> state to emptyList()
@@ -334,6 +363,13 @@ object AssistantMachine {
                 flushed to (listOf(AssistantEffect.Send(state.gen, AssistantProtocol.listProfiles(id))) + sends)
             }
         }
+        if (state.slash.due) {
+            val id = state.nextId
+            val slash = state.slash.copy(due = false, loading = true)
+            return flush(state.copy(slash = slash, nextId = id + 1, calls = state.calls + (id to PendingCall.Catalog(slash.profile)))).let { (flushed, sends) ->
+                flushed to (listOf(AssistantEffect.Send(state.gen, AssistantProtocol.commandsCatalog(id, state.runtimeId, state.profile))) + sends)
+            }
+        }
         if (state.calls.values.any { it == PendingCall.Create || it == PendingCall.Resume }) return state to emptyList()
         // A chat picked from the list on a socket that is already up: attach to it now.
         if (state.opening && state.runtimeId == null) {
@@ -350,6 +386,10 @@ object AssistantMachine {
                 listOf(AssistantEffect.Send(state.gen, AssistantProtocol.create(id, state.authority, "assistant-${queued.id}", queued.setup, state.profile)))
         }
         if (state.activeTurn != null) return state to emptyList()
+        if (queued.command) {
+            val parsed = SlashCommand.parse(queued.question) ?: return submit(state, queued.copy(command = false), identity = true)
+            return dispatch(state, queued.id, parsed.name, parsed.arg, hops = 0)
+        }
         val uploading = state.calls.values.filterIsInstance<PendingCall.Attach>().filter { it.turnId == queued.id }.map { it.imageId }
         val missing = queued.images.filter { it !in queued.attached && it !in uploading }
         if (missing.isNotEmpty()) {
@@ -363,13 +403,55 @@ object AssistantMachine {
         return submit(state, queued, identity = true)
     }
 
+    private fun dispatch(state: AssistantState, turnId: String, name: String, arg: String, hops: Int): Pair<AssistantState, List<AssistantEffect>> {
+        val sessionId = state.runtimeId ?: return state to emptyList()
+        val id = state.nextId
+        return state.copy(
+            nextId = id + 1,
+            calls = state.calls + (id to PendingCall.Dispatch(turnId, name, hops)),
+            turns = state.turns.update(turnId) { it.copy(status = TurnStatus.SENDING, error = null) },
+        ) to listOf(AssistantEffect.Send(state.gen, AssistantProtocol.commandDispatch(id, sessionId, name, arg, state.profile)))
+    }
+
+    /** What the server made of a slash command: output to show, a prompt to send, or text for the field. */
+    private fun dispatched(state: AssistantState, call: PendingCall.Dispatch, frame: AssistantFrame.Reply): Pair<AssistantState, List<AssistantEffect>> {
+        val turn = state.turns.firstOrNull { it.id == call.turnId } ?: return state to emptyList()
+        fun done(text: String) = state.copy(turns = state.turns.update(turn.id) { it.copy(status = TurnStatus.DONE, final = text, command = false) }) to
+            emptyList<AssistantEffect>()
+        fun failed(text: String) = state.copy(turns = state.turns.update(turn.id) { it.copy(status = TurnStatus.FAILED, error = text, command = false) }) to
+            emptyList<AssistantEffect>()
+        if (frame.errorCode == AssistantProtocol.NOT_DISPATCHABLE) {
+            // A built-in the dispatcher leaves to the slash runner.
+            val sessionId = state.runtimeId ?: return failed("연결이 끊겼어요")
+            val id = state.nextId
+            return state.copy(nextId = id + 1, calls = state.calls + (id to PendingCall.SlashExec(turn.id))) to
+                listOf(AssistantEffect.Send(state.gen, AssistantProtocol.slashExec(id, sessionId, turn.question, state.profile)))
+        }
+        if (!frame.ok) return failed(frame.errorMessage ?: "명령을 실행하지 못했어요")
+        val result = frame.result ?: return done("완료했어요")
+        val message = (result.opt("message") as? String)?.trim().orEmpty()
+        return when (result.opt("type") as? String) {
+            "exec", "plugin" -> done((result.opt("output") as? String)?.takeIf { it.isNotBlank() } ?: "(출력 없음)")
+            "alias" -> {
+                val target = (result.opt("target") as? String)?.trim()?.removePrefix("/")?.substringBefore(' ')
+                if (target.isNullOrEmpty() || call.hops >= MAX_ALIAS_HOPS) failed("명령을 찾지 못했어요")
+                else dispatch(state, turn.id, target, SlashCommand.parse(turn.question)?.arg.orEmpty(), call.hops + 1)
+            }
+            "prefill" -> if (message.isEmpty()) done("완료했어요")
+                else state.copy(turns = state.turns.filterNot { it.id == turn.id }) to listOf(AssistantEffect.Prefill(message))
+            else -> if (message.isEmpty()) done((result.opt("output") as? String)?.takeIf { it.isNotBlank() } ?: "완료했어요")
+                // A skill or send directive: its message is the prompt; the bubble keeps what was typed.
+                else submit(state, turn.copy(command = false, prompt = message), identity = state.authority)
+        }
+    }
+
     private fun submit(state: AssistantState, turn: AssistantTurn, identity: Boolean): Pair<AssistantState, List<AssistantEffect>> {
         val sessionId = state.runtimeId ?: return state to emptyList()
         val id = state.nextId
         return state.copy(
             nextId = id + 1,
             calls = state.calls + (id to PendingCall.Submit(turn.id, identity)),
-            turns = state.turns.update(turn.id) { it.copy(status = TurnStatus.SENDING, error = null) },
+            turns = state.turns.update(turn.id) { it.copy(status = TurnStatus.SENDING, error = null, prompt = turn.prompt, command = turn.command) },
         ) to listOf(AssistantEffect.Send(state.gen, AssistantProtocol.submit(id, sessionId, turn.prompt, turn.id.takeIf { identity },
             turn.images.mapNotNull { turn.attached[it] }, state.profile)))
     }
@@ -461,6 +543,15 @@ object AssistantMachine {
         val base = state.copy(calls = state.calls - frame.id)
         return when (call) {
             PendingCall.Capabilities, PendingCall.Interrupt -> base to emptyList()
+            is PendingCall.Catalog -> {
+                if (base.slash.profile != call.profile) base to emptyList()
+                else base.copy(slash = base.slash.copy(loading = false, items = frame.result?.let(AssistantProtocol::slashCatalog) ?: base.slash.items ?: emptyList())) to emptyList()
+            }
+            is PendingCall.Dispatch -> dispatched(base, call, frame)
+            is PendingCall.SlashExec -> base.copy(turns = base.turns.update(call.turnId) {
+                if (frame.ok) it.copy(status = TurnStatus.DONE, command = false, final = (frame.result?.opt("output") as? String)?.takeIf { o -> o.isNotBlank() } ?: "(출력 없음)")
+                else it.copy(status = TurnStatus.FAILED, command = false, error = frame.errorMessage ?: "명령을 실행하지 못했어요")
+            }) to emptyList()
             PendingCall.Profiles -> {
                 val rows = frame.profiles?.takeIf { frame.ok } ?: return base to emptyList()
                 // A selected bot the server no longer serves falls back to the server's own profile.
@@ -558,10 +649,13 @@ object AssistantMachine {
             runtimeId = null,
             requests = emptyList(),
             profilesDue = state.profilesDue || state.calls.values.any { it == PendingCall.Profiles },
+            slash = if (state.slash.loading) state.slash.copy(loading = false, due = true) else state.slash,
             // A photo staged on the old socket's session is uploaded again with the question.
             turns = state.turns.map {
                 when (it.status) {
-                    TurnStatus.SENDING -> it.copy(status = TurnStatus.UNKNOWN)
+                    // A command the server may not have resolved is not resent as plain text.
+                    TurnStatus.SENDING -> if (it.command) it.copy(status = TurnStatus.FAILED, command = false, error = "연결이 끊겨 명령을 실행하지 못했어요")
+                        else it.copy(status = TurnStatus.UNKNOWN)
                     TurnStatus.QUEUED -> it.copy(attached = emptyMap())
                     else -> it
                 }
@@ -579,4 +673,13 @@ object AssistantMachine {
 
     private fun List<AssistantTurn>.update(id: String, change: (AssistantTurn) -> AssistantTurn): List<AssistantTurn> =
         map { if (it.id == id) change(it) else it }
+}
+
+/** A typed `/name arg` command. */
+data class SlashCommand(val name: String, val arg: String) {
+    companion object {
+        private val NAME = Regex("^/([A-Za-z0-9][A-Za-z0-9_:.-]*)(?:\\s+([\\s\\S]*))?$")
+
+        fun parse(text: String): SlashCommand? = NAME.matchEntire(text.trim())?.let { SlashCommand(it.groupValues[1], it.groupValues[2].trim()) }
+    }
 }
