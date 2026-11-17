@@ -113,6 +113,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.rounded.TextFields
 import com.hermeswebui.android.webapp.GatewayEvent
 import com.hermeswebui.android.webapp.RpcId
 import androidx.compose.runtime.compositionLocalOf
@@ -444,26 +447,124 @@ private fun BotName() {
     }
 }
 
-/** The user's own words. A long one is cut at [maxLines] and opens in full on a tap. */
+/**
+ * The user's own words. A tap opens its menu: copy the message or select part of it. A long one is cut at [maxLines] and opens in full from "전체 보기".
+ */
 @Composable
 internal fun QuestionBubble(text: String, maxLines: Int) {
     val shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
     var open by remember(text) { mutableStateOf(false) }
     var cut by remember(text) { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    var selecting by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val view = LocalView.current
     Column(horizontalAlignment = Alignment.End) {
-        Text(
-            text,
-            style = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
-            maxLines = if (open) Int.MAX_VALUE else maxLines,
-            overflow = TextOverflow.Ellipsis,
-            onTextLayout = { if (!open) cut = it.hasVisualOverflow },
-            modifier = Modifier
-                .shadow(6.dp, shape, ambientColor = Lilac.copy(alpha = 0.3f), spotColor = Lilac.copy(alpha = 0.3f))
-                .clip(shape).background(Rose.Bubble)
-                .then(if (cut || open) Modifier.clickable(role = Role.Button) { open = !open } else Modifier)
-                .padding(horizontal = 15.dp, vertical = 11.dp),
-        )
-        if (cut || open) Text(if (open) "접기" else "전체 보기", style = RoseType.Meta.copy(color = Rose.ChipText), modifier = Modifier.padding(top = 5.dp, end = 6.dp))
+        Box {
+            Text(
+                text,
+                style = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
+                maxLines = if (open) Int.MAX_VALUE else maxLines,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { if (!open) cut = it.hasVisualOverflow },
+                modifier = Modifier
+                    .shadow(6.dp, shape, ambientColor = Lilac.copy(alpha = 0.3f), spotColor = Lilac.copy(alpha = 0.3f))
+                    .clip(shape).background(if (menu) Rose.Petal.copy(alpha = 0.55f) else Rose.Bubble)
+                    .combinedClickable(onLongClick = { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); menu = true }) { menu = true }
+                    .padding(horizontal = 15.dp, vertical = 11.dp),
+            )
+            DropdownMenu(
+                expanded = menu,
+                onDismissRequest = { menu = false },
+                shape = RoundedCornerShape(18.dp),
+                containerColor = Rose.Panel,
+                border = BorderStroke(1.dp, Rose.Border),
+                shadowElevation = 6.dp,
+            ) {
+                BubbleMenuRow(Icons.Rounded.ContentCopy, "메시지 복사") {
+                    menu = false
+                    clipboard.setText(AnnotatedString(text))
+                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                }
+                BubbleMenuRow(Icons.Rounded.TextFields, "텍스트 선택") {
+                    menu = false
+                    selecting = true
+                }
+            }
+        }
+        if (cut || open) Text(if (open) "접기" else "전체 보기", style = RoseType.Meta.copy(color = Rose.ChipText, fontSize = 11.5.sp),
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button) { open = !open }
+                .heightIn(min = 32.dp).padding(horizontal = 8.dp, vertical = 8.dp))
+    }
+    if (selecting) SelectTextDialog(text) { selecting = false }
+}
+
+@Composable
+private fun BubbleMenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.widthIn(min = 200.dp).clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = Rose.Deep, modifier = Modifier.size(18.dp))
+        Text(label, fontSize = 15.sp, color = Rose.Text, modifier = Modifier.padding(start = 12.dp))
+    }
+}
+
+/**
+ * The whole message, already selected, so its handles can be dragged to any part of it. Laid out like
+ * the app's other dialogs; the text sits in the same bubble it came from.
+ */
+@Composable
+private fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
+    var value by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(text, androidx.compose.ui.text.TextRange(0, text.length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val clipboard = LocalClipboardManager.current
+    val view = LocalView.current
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val selection = value.selection
+    val picked = if (selection.collapsed) "" else text.substring(selection.min, selection.max)
+    val whole = picked.isEmpty() || picked.length == text.length
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Rose.Panel).border(1.dp, Rose.Border, RoundedCornerShape(26.dp))
+                .padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).clip(CircleShape).background(Rose.Soft), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.TextFields, null, tint = Rose.Deep, modifier = Modifier.size(20.dp))
+                }
+                Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                    Text("텍스트 선택", style = RoseType.Body.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold))
+                    Text("손잡이를 끌어 원하는 부분만 골라요", style = RoseType.Label)
+                }
+            }
+            BasicTextField(
+                value = value,
+                // Read only: only the selection may change.
+                onValueChange = { value = value.copy(selection = it.selection) },
+                readOnly = true,
+                textStyle = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
+                cursorBrush = SolidColor(Rose.Deep),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp, max = 380.dp).focusRequester(focus)
+                    .clip(RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)).background(Rose.Bubble)
+                    .border(1.dp, Rose.Petal.copy(alpha = 0.6f), RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
+                    .padding(horizontal = 15.dp, vertical = 12.dp),
+            )
+            Text(
+                if (whole) "전체 ${text.length}자" else "${picked.length}자 선택됨",
+                style = RoseType.Meta.copy(color = Rose.ChipText),
+                modifier = Modifier.align(Alignment.End),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("닫기", filled = false, modifier = Modifier.weight(1f), onClick = onDismiss)
+                PillButton(if (whole) "전체 복사" else "선택 복사", filled = true, icon = Icons.Rounded.ContentCopy, modifier = Modifier.weight(1f)) {
+                    clipboard.setText(AnnotatedString(picked.ifEmpty { text }))
+                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    onDismiss()
+                }
+            }
+        }
     }
 }
 
