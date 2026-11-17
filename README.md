@@ -1,519 +1,89 @@
 <div align="center">
 
-<img src="app/src/main/res/drawable-nodpi/hermes_agent_icon.png" width="112" alt="Hermes icon">
+<img src="app/src/main/res/drawable-nodpi/hermes_agent_icon.png" width="112" alt="Hermes Next icon">
 
-# Hermes Next
+# Hermes Next for Android
 
-**A native Android client for the official Hermes Agent Webapp: your chats, bots and tools without the web page, connected even when the app isn't on screen.**
+**A native Android companion for the official [Hermes Agent Webapp](https://github.com/NousResearch/hermes-agent): chats, background alerts, and a quick assistant without waiting for a web page.**
 
-[![Download](https://img.shields.io/github/v/release/zimza1abim/hermes-next-android?label=download&logo=android&color=B04F7D)](https://github.com/zimza1abim/hermes-next-android/releases/latest)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#-build)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)](#-build)
-[![Target SDK](https://img.shields.io/badge/targetSdk-37-4285F4)](#-build)
+[![Download](https://img.shields.io/github/v/release/zimza1abim/hermes-next-android?label=Download&logo=android&color=B04F7D)](https://github.com/zimza1abim/hermes-next-android/releases/latest)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#requirements)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)](#build-from-source)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Based on hermes-android](https://img.shields.io/badge/based%20on-hermes--webui%2Fhermes--android-555?logo=github)](https://github.com/hermes-webui/hermes-android)
 
-[Download](#-download) ·
-[Native chats](#-native-chats) ·
-[Highlights](#-highlights) ·
-[How it works](#-how-it-works) ·
-[Notifications](#-notifications) ·
-[Gateway hook](#-gateway-hook) ·
-[Assistant](#-quick-assistant) ·
-[Limits](#-known-limits) ·
-[Build](#-build)
+[Download](#download) ·
+[Native chats](#native-chats) ·
+[Background alerts](#background-alerts) ·
+[Quick assistant](#quick-assistant) ·
+[Build](#build-from-source)
 
 </div>
 
 ---
 
-Hermes Next is built on [hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android),
-which hosts the official Hermes Agent Webapp in a hardened WebView. Hermes Next
-replaces the page with **native chat screens** for everyday use and adds what a
-phone needs on top: a gateway connection that keeps working in the background,
-instant native alerts, and answering Hermes straight from the notification.
+Hermes Next is a fork of
+[hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android).
+It keeps the upstream hardened WebView for sign-in and the official Webapp,
+then adds a native chat client and a gateway monitor for the parts of Hermes
+you need on a phone.
 
-> [!NOTE]
-> Everything above the line at the bottom describes Hermes Next. The upstream
-> README is kept unchanged in a folded section at the end.
+## Screenshots
 
-## 📦 Download
+### Main tab
 
-Get the APK from [Releases](https://github.com/zimza1abim/hermes-next-android/releases/latest).
+![Main tab](docs/screenshots/main.png)
 
-| | |
-|---|---|
-| **Package** | `dev.hermes.next` |
-| **Version** | 1.0.0 |
-| **Requires** | Android 8.0 or later, and a Hermes Webapp server you can sign in to |
-| **Signing certificate (SHA-256)** | `8b43044272e0affee5cc1de7a7456994c80e033700fca858ed617c47356094eb` |
+### Conversation
 
-It installs next to the upstream Hermes app (`com.hermeswebui.android`) as a
-separate app, so sign in again after installing. Enter your server address on
-first start, sign in on the server's own page, and the native chats take over.
+![Conversation](docs/screenshots/chat.png)
 
-## 📱 Native chats
+### Plugins and MCP
 
-The app icon opens native screens, not the Webapp page. They talk to the
-gateway socket and the server's HTTP API directly, in one rose style.
+![Plugins and MCP](docs/screenshots/plugin.png)
 
-| Screen | What it does |
-|---|---|
-| **Chats** | Every chat, newest first, plus one tab for the main bot and one per bot. Swipe sideways between tabs. Bot chats, app chats, messaging threads (Telegram and others) and cron runs are separate sections |
-| **Chat actions** | Long-press a chat to rename, pin, archive or delete it. Changes are saved on the server, so every device sees them |
-| **Unread and running** | A blinking dot marks a chat with an answer being written or one you haven't read. Opening a chat marks it read everywhere |
-| **Conversation** | Earlier transcript, live answers, stop, photos, approvals, model and reasoning level. Opening another chat leaves a running answer to finish on the server |
-| **Answers** | Headings, lists, quotes, tables and an editor-style code block with line numbers, token colours and copy |
-| **Bots** | Each bot's picture and @name head its answers; a bot without a picture shows the Hermes icon |
-| **Cron jobs** | Every profile's jobs: run now, pause, resume |
-| **Skills · tools · MCP** | What the selected bot has and what is switched on, with search |
-| **Install** | Plugins and MCP servers from the Hermes catalog, with search and a confirmation before anything is installed |
-| **Archived chats** | Chats you archived, and a button to bring each back |
-| **Font** | Any Galaxy font installed on the phone, applied to every native screen |
+### Font selection
 
-- **No page to boot.** A chat opens about a second after the tap; the Webapp page
-  took about 12 seconds from a cold start over the same link.
-- **Notifications open the chat natively.** Tapping an alert opens that chat in
-  the native screens.
-- **The font is loaded before the first frame.** The picked font's file is copied
-  into the app and read synchronously at start, so nothing is drawn in another
-  font first.
-- **The Webapp is still there** for sign-in and anything the native screens do
-  not cover (Menu › Open Webapp). Back returns to the native chats. Menu ›
-  "Start on this screen" switches the app icon back to the Webapp.
-
-> [!NOTE]
-> The gateway's wire protocol is not a public API. A Hermes update can change it,
-> and the native screens depend on more of it than the background monitor does.
-
-## ✨ Highlights
+![Font selection](docs/screenshots/font.png)
 
 | | |
 |---|---|
-| 📱 **Native chats** | Chats, bots, cron, skills, MCP and installs without the Webapp page. |
-| 🔌 **Always connected** | A native gateway monitor keeps watching your chats while the app is hidden or swiped away. |
-| ⚡ **Instant alerts** | Finished, failed, approval and question alerts arrive as they happen, not 30 seconds late. |
-| 💬 **Answer in place** | Allow or deny a command, pick a choice or type a reply without opening the app. |
-| ✅ **Confirmed answers** | A notification answer counts only once the gateway confirms it. |
-| 🖥️ **Chats from anywhere** | Chats started on another device are found and watched too. |
-| 🔁 **Nothing missed** | Events from a dropped connection are replayed when it comes back. |
-| 🌸 **Quick assistant** | A small panel over any app: ask, search, translate or summarize, with photos, without opening the full app. |
-
-## 🧠 How it works
-
-The Webapp page is a great foreground client but a poor background one. Some
-phones, Samsung One UI among them, push a hidden WebView renderer to the lowest
-priority. Its socket then misses the gateway's pings, alerts arrive late, and
-the page reconnects when you return.
-
-So while Hermes is hidden, the app opens **its own** WebSocket to the gateway,
-independent of the WebView:
-
-```mermaid
-flowchart LR
-    subgraph Phone
-        direction TB
-        Page["Webapp page<br/>(WebView)"]
-        Service["Keep-alive service<br/>(foreground, specialUse)"]
-        Monitor["Gateway monitor<br/>(OkHttp WebSocket)"]
-        Tray["Notification tray"]
-        Service --- Monitor
-        Monitor -- alerts --> Tray
-        Tray -- "Allow / Deny / Reply" --> Monitor
-    end
-    Gateway[("Hermes gateway<br/>/api/ws")]
-    Page <-- "on screen" --> Gateway
-    Monitor <-- "in background" --> Gateway
-```
-
-<details>
-<summary><strong>The monitor, step by step</strong></summary>
-
-1. **Sign in.** The monitor mints a one-use socket ticket with the page's own
-   sign-in cookie (`POST /api/webapp/socket-ticket`).
-2. **Connect.** It dials `/api/ws` with the ticket, waits for `gateway.ready`
-   and declares that it answers server requests (`client.capabilities`).
-3. **Attach.** It attaches to each chat it watches as a viewer
-   (`session.resume`). A viewer receives the chat's events and open prompts
-   without taking the chat over from other devices.
-4. **Discover.** Every 10 seconds it reads the gateway's live sessions
-   (`session.active_list`) and attaches to any running chat it doesn't watch yet.
-5. **Replay.** After a reconnect it asks for the events it missed
-   (`session.events.since`), so a turn that finished during the gap still alerts.
-6. **Hand back.** When you open the app, the monitor closes and the page takes
-   over. Replay cursors are cleared, so events you already saw never replay.
-
-</details>
-
-<details>
-<summary><strong>Staying alive</strong></summary>
-
-- **The monitor lives in the service**, not in the activity or the page. It
-  starts whenever Hermes is hidden and the server is known to be a Webapp, even
-  if you leave before the page connects. Swiping Hermes away from Recents keeps
-  alerts coming, and the service restores the monitor if Android restarts it.
-- **Starts after a reboot or an app update**, without opening the app.
-- **Keeps the sign-in fresh.** It stores the cookies the gateway rotates and
-  refreshes the sign-in every 6 hours, so a day in the background doesn't sign
-  you out.
-- **Says so when it can't run.** If Android refuses the background start, a
-  **Background alerts stopped** notice appears instead of silence.
-- **`specialUse` foreground service**, so there is no daily runtime cap.
-- **Reconnects on its own.** Retries back off from 1 to 30 seconds, and a change
-  of default network redials at once. A socket whose `gateway.ready` or
-  `session.resume` answer is 30 seconds late is closed and redialed.
-- **Sturdier WebView.** The renderer is kept at important priority, and if it
-  crashes, the WebView is replaced instead of the app crashing.
-
-</details>
-
-<details>
-<summary><strong>No duplicates</strong></summary>
-
-While both the page and the monitor are connected, the same event can arrive
-twice. Prompts are keyed by the gateway's request id, and one-shot alerts by the
-gateway's per-session sequence number. Whichever socket delivers first posts
-the alert, and the other copy is dropped. The Webapp's own browser
-notifications are held back so they never duplicate a native one.
-
-</details>
-
-## 🔔 Notifications
-
-| Alert | When | Actions |
-|---|---|---|
-| **Finished** | A reply finished | Tap to open the chat |
-| **Failed / Stopped** | A reply ended with an error or was interrupted | Tap to open the chat |
-| **Background task done** | A background task finished | Tap to open the chat |
-| **Approval needed** | Hermes asks before running a command | **Allow** (unlocked phone) · **Deny** |
-| **Question** | Hermes needs an answer | One to three choices get a button each, any other single question gets **Reply** |
-
-- 📝 **Titled with the chat's name**, with the reason as the subtitle.
-- 🗂️ **Grouped per chat**, with a summary once a chat has two alerts.
-- 🔒 **Private on the lock screen.** It shows only "Hermes" and the reason.
-- 🧹 **Clean tray.** Opening the app clears its Hermes alerts.
-- 🧭 **Tap opens that chat**, in the native screens.
-
-> [!IMPORTANT]
-> A notification answer is shown as sent only after the gateway confirms it.
-> If no receipt arrives, the alert's subtitle says the answer **may have been
-> sent** and its buttons are hidden, so it can't be sent twice. If there is no
-> connection to send on, the subtitle says **not sent** and the buttons stay.
-> The command or question stays readable either way. Receipts need the
-> [gateway hook](#-gateway-hook).
-
-## 🧩 Gateway hook
-
-[`gateway-patches/hermes-android-ack/`](gateway-patches/hermes-android-ack/) is
-a small startup hook for the machine that runs the Hermes gateway.
-
-| What it does | Why |
-|---|---|
-| Sends a receipt when the gateway settles an answer from a notification | So the app knows the answer landed |
-| Stops the monitor's viewer attach from bumping a chat's last-active time | So chat order on your other devices doesn't change |
-
-**Install** it, then restart the gateway:
-
-```sh
-mkdir -p ~/.hermes/hooks/hermes-android-ack
-cp gateway-patches/hermes-android-ack/{HOOK.yaml,handler.py} ~/.hermes/hooks/hermes-android-ack/
-```
-
-The gateway log then shows `Loaded hook 'hermes-android-ack'`.
-
-> [!WARNING]
-> The hook relies on gateway internals, so check it after every Hermes update.
-> It fails safe:
-> - **Without the hook**, alerts still arrive, but every notification answer
->   shows as unconfirmed after 30 seconds.
-> - **If the last-active patch no longer matches** the gateway code, the hook
->   falls back to a normal attach. The app then posts one
->   **Gateway compatibility** notice, and chat order may change until the hook
->   is updated.
-
-## 🌸 Quick assistant
-
-A small panel that opens over whatever app is on screen and asks Hermes over the
-same gateway connection. It is a side tool: it opens at a fixed small size,
-grows a little once a chat starts, and has an expand button for long answers.
-
-**Ways to open it**
-
-| From | How |
-|---|---|
-| Launcher icon | Long-press **Hermes** › **Ask Hermes** or **Photo question** |
-| Galaxy Modes and Routines, Tasker | App `dev.hermes.next`, activity `com.hermeswebui.android.assistant.AssistantActivity` |
-| A link or Tasker URL | `hermes://assistant`, with optional `mode=ask\|search\|translate\|summary`, `text=…` and `attach=camera` |
-| Selected text | **Translate with Hermes** in the text selection menu sends it at once |
-
-A link or another app can only fill the field: sending is always your tap. The
-same values work as intent extras named `mode`, `text` and `attach`.
-
-**What it does**
-
-- Every open starts a new chat. Earlier chats stay in the Hermes app, and an
-  answer still being written when you closed the panel is kept.
-- Attach up to four photos from the gallery or the camera. They are shrunk and
-  re-encoded first, so no location data is sent.
-- **Model chip** on the start screen: the models you starred in Hermes, every
-  signed-in provider's models with search, and the reasoning level. The choice
-  applies to that chat only and is remembered for the next one.
-- Approvals can be answered in the panel. Questions open the chat in the app.
-- **Open in app** jumps to the same chat in the native screens.
-- Answers stream in gently, with links, code and lists rendered. Copy, ask again,
-  or replace the selected text with a translation.
-
-It needs the official Webapp server and a signed-in app.
-
-## ⚙️ Settings
-
-Everything is under **Application Settings › Notifications**:
-
-| Setting | Effect |
-|---|---|
-| **Stay connected in the background** | Runs the keep-alive service and the gateway monitor |
-| **Message previews** | Show or hide reply text and commands in alerts. With previews off, questions get no answer buttons |
-| **Per-alert switches** | Turn each kind on or off |
-| **Sound and vibration** | Opens Android's channel settings for each kind |
-| **Unrestricted battery use** | Shows the battery optimization state and requests the exemption |
-
-> [!TIP]
-> On Samsung and some other phones, allow **Unrestricted battery use**. Otherwise
-> they may close the app in the background even with the ongoing notification.
-
-## 🚧 Known limits
-
-| Limit | Why |
-|---|---|
-| A very short turn can be missed | A turn that starts and ends within the 10-second list interval, in a chat that wasn't watched, is never seen |
-| Bot chats in another profile aren't watched | The monitor connects for the gateway's launch profile only |
-| A prompt answered on another device stays in the tray | The gateway sends no event for that. Opening the app clears it |
-| The assistant connects through the network path you have | Its first connect costs a ticket and a socket round trip to the server; it stays connected for 3 minutes after you close it |
-| Your own message sent from another device appears late | The gateway doesn't relay user messages to other clients. It shows up once the turn is saved |
-| A chat's newest line shows only for chats opened on this phone | The server's preview is the head of the first question; the app keeps the newest line of chats it has shown |
-| Some menus are Webapp-only | Changing Hermes's default model, switching skills or MCP servers on and off, uninstalling, and MCP servers that need keys or a sign-in |
-
-## 🛠 Build
-
-Requires the Android SDK and Gradle. The app targets Android 8.0 (API 26) up to
-API 37.
-
-```sh
-gradle testDebugUnitTest assembleRelease
-```
-
-Release signing reads an untracked `keystore.properties` at the repo root:
-
-```properties
-storeFile=/path/to/release.jks
-storePassword=…
-keyAlias=…
-keyPassword=…
-```
-
-The APK lands in `app/build/outputs/apk/release/` as `hermes-next-v<version>-release.apk`.
-Install it over an existing build with `adb install -r` to keep your sign-in; an
-update must be signed with the same key.
-
-The package is `dev.hermes.next`, while the code keeps the upstream
-`com.hermeswebui.android` namespace so upstream changes still merge cleanly.
-
-<details>
-<summary><strong>Where things live</strong></summary>
-
-| Path | Role |
-|---|---|
-| `webapp/GatewayProtocol.kt` | Parses gateway frames and encodes requests |
-| `webapp/WebappAlerts.kt` | The reducer: every alert, prompt and answer decision |
-| `webapp/GatewayMonitor.kt` | The monitor's connection state machine |
-| `webapp/GatewayMonitorLink.kt` | Sockets, tickets, timers and replay, with OkHttp |
-| `webapp/WebappGatewayCoordinator.kt` | Renders the reducer's effects: notifications, service, WebView |
-| `webapp/AlertGroups.kt` | Per-chat grouping and summaries |
-| `background/HermesKeepAliveService.kt` | The foreground service that keeps the process alive |
-| `webui/HermesWebUiScripts.kt` | Scripts injected into the Webapp page |
-| `assistant/AssistantMachine.kt` | The assistant's reducer: connection, chat and turns |
-| `assistant/AssistantController.kt` | Runs the reducer, photos and model choices for the panel |
-| `assistant/AssistantScreen.kt` | The panel UI, and the answer and code-block rendering both screens share |
-| `assistant/ChatActivity.kt` | The native chats: list, conversation and menu panes |
-| `assistant/ChatScreen.kt` | The chat list, swipe tabs, chat actions and the conversation screen |
-| `assistant/ChatMenus.kt` | Menu, cron, skills · tools · MCP, install, archived chats and font screens |
-| `assistant/HermesAdmin.kt` | The server's HTTP API: cron, capabilities, catalogs, chat changes |
-| `assistant/AssistantTheme.kt` | Colours and text styles of every native screen |
-| `webapp/SignInGate.kt` | Serializes sign-in ticket requests for the monitor and the assistant |
-| `gateway-patches/hermes-android-ack/` | The gateway hook |
-
-Paths under `webapp/`, `assistant/`, `background/` and `webui/` are in
-`app/src/main/java/com/hermeswebui/android/`.
-
-</details>
-
-## 📜 Credits
-
-Built on [hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android)
-(MIT), whose license and copyright notice are kept in [LICENSE](LICENSE). The Hermes Agent and its Webapp are by
-[Nous Research](https://github.com/NousResearch/hermes-agent).
-
----
-
-<details>
-<summary><strong>Upstream README (hermes-webui/hermes-android)</strong></summary>
-
-# Hermes-Android
-
-Hermes-Android brings the Hermes workspace to Android without turning it
-into a second product.
-
-It hosts the official Hermes Webapp or Hermes WebUI as the real application
-surface and adds the Android
-capabilities that matter on a phone or tablet: a hardened WebView, trusted
-navigation, native sharing, uploads and downloads, notifications, secure local
-settings, update delivery, and recovery paths when the mobile runtime gets in
-the way.
-
-Hermes-Android is the native shell that makes the web frontend feel at home
-on Android.
-
-**Now supporting the official Hermes Agent WebApp:** bring the browser-hosted
-Desktop workspace to Android with native sharing, file pickers, notifications,
-and normal Android Back navigation. No separate Hermes WebUI installation required.
-See [Official Hermes Webapp](#official-hermes-webapp) for setup and current limits.
-
-- Your Hermes workspace, on Android
-- Native where Android matters
-- WebUI where Hermes matters
-
-![Hermes-Android lifestyle mockup](assets/brand/hero-lifestyle-mockup.jpg)
-
-## See It
-
-Hermes-Android keeps the real Hermes experience intact, then makes it feel
-right on Android.
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="assets/brand/ui-mobile-home.jpg" alt="Hermes-Android mobile home screen" />
-    </td>
-    <td width="50%">
-      <img src="assets/brand/ui-mobile-response-closeup.jpg" alt="Hermes-Android mobile conversation close-up" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="assets/brand/ui-tablet-overview.jpg" alt="Hermes-Android tablet overview with split-pane chat layout" />
-    </td>
-    <td width="50%">
-      <img src="assets/brand/ui-tablet-chat.jpg" alt="Hermes-Android tablet conversation view" />
-    </td>
-  </tr>
-</table>
-
-Connect to either the official
-[Hermes Webapp](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#use-the-desktop-workspace-from-a-browser)
-(Hermes Agent v0.22.6 or newer) or a separate
-[Hermes WebUI](https://github.com/nesquena/hermes-webui) instance. On first
-launch, enter that frontend's URL. The official Webapp does not require
-installing Hermes WebUI.
-
-### Official Hermes Webapp
-
-Enable the browser-hosted Desktop workspace on your Hermes host with
-`hermes config set webapp.enabled true`, then run `hermes webapp`. For access
-from Android, configure Desktop **Settings > Web Access** or follow the
-upstream Webapp guide to publish it through your trusted VPN/reverse proxy.
-Use the Webapp URL, not the separate admin Dashboard URL. Android does not
-enable Web Access or change server configuration for you.
-
-Add that URL in Android's server settings and sign in using the server's own
-page. Use HTTPS for remote access: microphone capture and other browser
-secure-context features are unavailable on ordinary LAN HTTP. Do not copy
-one-use sign-in links or tokens into saved server profiles.
-
-Android recognizes the official workspace's `__HERMES_UI_SURFACE__` marker.
-**Android Back** steps through the workspace's in-page (hash) navigation
-without reloading it or returning to the sign-in page, then asks you to press
-Back again to exit. WebUI uses its browser history first, then the same
-press-again-to-exit confirmation. Back never opens Application Settings.
-
-Open **Application Settings** even when the page fails to load from the
-launcher icon's long-press **Settings** shortcut or the **Edit server URL**
-button on the connection error screen. In **Application Settings > Notifications**,
-**While open or working** enables a silent Settings shortcut while Hermes is
-visible and background WebUI session monitoring. The idle shortcut disappears
-when you leave Hermes. Background work and the latest browser message share
-that same notification instead of adding another entry. Expand it to read the
-message and use **Reply** when supported; tapping opens the conversation.
-**Settings** becomes a compact cogwheel beside Reply, with the normal text label
-otherwise. Android controls the final action layout. **Android notification
-settings** opens the system controls for permission, sound and notification
-channels. Long-pressing an alert also opens Android's controls, not Application
-Settings. In WebUI, the sidebar entry still works too.
-
-Both frontends use the native upload picker, trusted HTTP(S) downloads,
-microphone permission handling, system-bar insets, pinch zoom, and Android
-Notification API bridge. The official workspace keeps ownership of its React
-editors, mobile keyboard behavior, tabs, responsive layout, and voice UI;
-Android does not emulate Electron or inject WebUI's sidebar/editor repairs.
-WebUI-specific session deep links, background SSE monitoring and approval
-actions are not an adapter for the official Webapp's gateway WebSocket
-protocol. Blob/data-URL exports and notification clicks that require a
-page-local JavaScript callback are not yet supported natively.
-
-### Launcher icon and server labels
-
-In **Application Settings > Appearance > Launcher icon**, near the bottom
-above About, choose the existing
-Hermes WebUI artwork or the official Hermes Agent artwork. This changes only
-the Android launcher entry, independently of the current server. Launchers may
-take a moment to refresh; a previously pinned home-screen shortcut may need
-to be pinned again.
-
-Servers default to **Automatic**: after the configured frontend loads,
-Android recognizes its explicit page marker and remembers a **blue Hermes Agent**
-or **gold Hermes WebUI** badge. Detection may need you to finish signing in first.
-Unknown/older pages stay unlabeled rather than being guessed from their URL,
-title, or `/api/status`.
-
-Long-press a server and choose **Edit > Server type** to override detection,
-or choose **Automatic** to use the detected type again. Existing manual choices
-are preserved. Detection and labels never change navigation, trust, frontend
-behavior, or your launcher icon, and label edits do not reload the workspace.
-Official Agent artwork attribution is included in [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).
-
-Production Play description text is maintained in `store/google-play/en-US/`
-and submitted with production releases; F-Droid's channel-specific text lives
-under `fastlane/metadata/android/en-US/`. Publisher API readback verifies the
-committed Play text, not the timing of public storefront review/propagation.
-
-### Welcome guide
-
-The first time you open the app with no server configured, a short swipeable
-welcome guide explains what Hermes-Android is (a remote control for your own
-Hermes Agent), the two interfaces it can host (the community Hermes WebUI, or
-the official Hermes Agent Webapp, which you must enable on your computer first),
-how to have your agent set up the host side, and why you need a private network
-such as Tailscale to reach it away from home. Swipe or use Back/Next, or Skip.
-Reopen it any time from **Show welcome guide** in Settings. It is informational
-only: external links open in your browser, and nothing is sent to a server.
-Existing users with a server already configured do not see it automatically.
-
-### Copy a guided setup command
-
-Already running Hermes Agent? On first launch, use **Copy command to set up
-WebUI** or **Copy command to set up Hermes WebApp** below the connection form.
-After connecting, expand **Need help setting up a server?** under Servers.
-Paste the copied text into your existing **Hermes chat on the computer/server
-that runs Hermes**, not a terminal. Android only copies the prompt: it does not
-install software, run a shell command, or change your server.
-
-Choose the official WebApp for the Desktop workspace without a separate WebUI
-installation, or WebUI for the community web interface. Follow Hermes' guidance,
-then paste the reusable server URL into Android and sign in. A URL beginning
-with `localhost` or `127.0.0.1` points to the phone when opened on the phone.
-Prefer authenticated HTTPS over a trusted VPN; never save temporary sign-in links.
-These prompts guide an existing agent, not a guaranteed unattended installer.
-If you do not have Hermes Agent yet, start with the
-[official installation guide](https://hermes-agent.nousresearch.com/docs/getting-started/installation).
+| **Package ID** | `dev.hermes.next` |
+| **Current version** | `1.0.0` (version code `10000`) |
+| **Android support** | Android 8.0 / API 26 or later; target SDK 37 |
+| **Native mode requires** | A signed-in official Hermes Agent Webapp with its gateway enabled |
+| **Gateway endpoints** | `/api/webapp/socket-ticket` and `/api/ws` |
+
+## Download
+
+Download the APK from [GitHub Releases](https://github.com/zimza1abim/hermes-next-android/releases/latest).
+It installs alongside upstream Hermes (`com.hermeswebui.android`) because it
+uses a separate application ID. After installing, enter your server address and
+sign in on the server's own page.
+
+Only install an APK whose source and signing identity you trust. Releases and
+their checksums are the authoritative distribution channel for this project.
+
+## Requirements
+
+You need a Hermes Agent server that you can already sign in to. For the native
+chat and background-monitor features, use the official Hermes Agent Webapp
+with the gateway endpoints above available to the phone.
+
+Use HTTPS or a trusted VPN/private network when connecting away from home. Do
+not expose an unauthenticated Hermes server directly to the public internet,
+and do not save a short-lived sign-in URL as the server address.
+
+The embedded WebView remains available for sign-in and for Webapp features not
+yet offered natively. Hermes WebUI deployments can still use the upstream
+WebView experience; the native-chat features are built for the official
+Webapp gateway.
+
+### Server setup help
+
+The first-run guide can copy either of the following prompts. Paste one into an
+existing Hermes chat on the computer or server that runs Hermes—not into a
+terminal and not on the phone. Copying a prompt does not install anything or
+verify that the phone can reach the server.
 
 **Copy command to set up WebUI** (paste into Hermes chat):
 
@@ -539,341 +109,164 @@ For phone access, prefer Desktop Settings > Web Access with authenticated HTTPS 
 Verify hermes webapp --status and the sign-in flow, then guide me through a phone-side connection check. Localhost/127.0.0.1 on my phone is not this server. Give me the reusable HTTP(S) server URL to save in Hermes-Android and simple sign-in steps. Keep temporary one-use sign-in links, passwords, API keys and tokens private and out of the saved URL and your response. Prefer HTTPS for microphone and browser features. If any setup or phone check cannot be verified, say what remains.
 ```
 
-## Why This Exists
+## Native chats
 
-Hermes already has a strong web experience. Android should not fork that
-experience or reimplement it badly.
+The launcher opens native Compose screens by default. They use the Hermes
+gateway socket and HTTP API directly, so chat changes stay in sync with the
+Webapp and other devices.
 
-This repository exists to solve the Android-specific problems well:
+| Area | Available now |
+|---|---|
+| **Chats and bots** | All chats ordered by recent activity, bot tabs, swipe navigation, and title/text search |
+| **Chat actions** | Rename, pin, archive, restore, and delete; all are written back to the server |
+| **Conversations** | Streaming answers, stop, command approvals, photos, model and reasoning selection |
+| **Output** | Markdown with headings, lists, quotes, tables, and code blocks with line numbers and copy |
+| **Server tools** | Cron run/pause/resume; searchable skills, tools, MCP servers, plugins, and install catalogs |
+| **Appearance** | A phone font selection applied before the first native frame |
 
-- Host Hermes WebUI inside a secure, reliable Android shell
-- Preserve WebUI behavior instead of replacing it with app-specific workflows
-- Fix Android WebView compatibility issues that break real usage
-- Add Android-native capabilities where the browser alone is not enough
-- Keep distribution, signing, updates, and device behavior production-ready
+Select **Open Webapp** from the menu for a feature the native screens do not
+cover. **Start on this screen** switches the launcher back to the Webapp.
 
-The result is a native-feeling Android client that still behaves like Hermes
-WebUI, not a parallel mobile rewrite that drifts out of sync.
+> [!NOTE]
+> The Hermes gateway protocol is not a public stable API. A Hermes Agent
+> update can require a matching Hermes Next update.
 
-## Who This Is For
+## Background alerts
 
-Hermes-Android is built for:
+Android can keep a foreground service alive while the app is not visible.
+Hermes Next uses that allowance for its own gateway monitor instead of relying
+on a hidden WebView renderer. It watches active chats, reconnects with replay
+cursors after a drop, and posts native alerts for completed, failed, stopped,
+approval, question, and background-task events.
 
-- Hermes users who want their real workspace on Android, not a reduced mobile fallback
-- Self-hosters who need HTTP or HTTPS support for trusted local or remote Hermes deployments
-- Testers and contributors who want a proper Android distribution channel instead of a one-off wrapper
-- Teams that want Hermes WebUI parity while still respecting Android platform expectations
+Alerts are grouped by chat and keep previews private on the lock screen. When
+the gateway supports it, notification actions let you allow/deny a command,
+choose an answer, or reply without opening the app. An action is displayed as
+sent only after the gateway confirms it; uncertain sends stay clearly marked
+so they cannot be accidentally repeated.
 
-## Why Not Just Use Chrome?
+For reliable delivery, enable **Stay connected in the background** and, on
+aggressive devices such as some Samsung models, grant **Unrestricted battery
+use** in the app's notification/background settings. Android can still refuse
+a background start; Hermes Next shows a *Background alerts stopped* notice
+instead of silently claiming that monitoring is active.
 
-Because opening Hermes in a mobile browser is not the same as integrating it
-properly with Android.
+### Optional gateway hook
 
-Hermes-Android adds the platform work that a plain browser tab does not own:
+[`gateway-patches/hermes-android-ack/`](gateway-patches/hermes-android-ack/)
+contains an optional startup hook for the machine running the Hermes gateway.
+It adds delivery receipts for notification replies and avoids updating a chat's
+last-active time when the monitor attaches as a viewer.
 
-- Trusted in-app navigation and host-boundary enforcement
-- Native share-sheet intake, uploads, downloads, and camera capture
-- Android-backed notifications and update delivery
-- Recovery flows for bad server settings, broken WebView states, and reconnect windows
-- WebView-specific compatibility fixes so Hermes surfaces render and behave correctly on Android
-
-The goal is not to replace the web app. The goal is to make the web app feel
-first-class on Android.
-
-## What Hermes-Android Owns
-
-- Secure WebView hosting for trusted Hermes HTTP and HTTPS deployments
-- Host allowlist enforcement and external handoff for untrusted links
-- Android lifecycle, recovery, deep links, and session restore behavior
-- Native settings, encrypted local storage, and server profile management
-- Share-sheet intake, file uploads, downloads, and camera capture
-- Android-backed Hermes notifications and update alerts
-- Release packaging for both Play and GitHub channels
-
-## What Stays In The Web Frontend
-
-- Product behavior and feature workflows
-- Chat, sessions, workspace, routing, and API behavior
-- UI layout, styling, animations, and dashboard behavior
-- Cross-platform features that should work the same in browser, desktop, and Android
-
-If a change belongs to Hermes everywhere, it belongs in WebUI first.
-
-## Highlights
-
-### Native Hermes, not a compromised wrapper
-
-- Kotlin + Jetpack Compose app shell around the official Webapp or Hermes WebUI
-- Hardened WebView defaults with DOM storage and browser-managed HTTP and service-worker cache behavior
-- Pull-to-refresh, loading, offline, and recovery flows designed for Android
-- Deep link support for Hermes sessions through `hermes://session/{id}`
-- Native recovery route through `hermes://app/settings`
-
-### Android-specific compatibility work that matters
-
-- Measured layout/visual-viewport repair for Android WebView builds that collapse Hermes layout, including shifting prompt surfaces fully above the software keyboard
-- Clarify-specific initial-autofocus handling that keeps multiple-choice options visible without blocking editable WebUI dialogs or later validation focus
-- System-bar safe inset handling so Hermes content does not sit under Android status and navigation bars
-- Forced WebView darkening disabled so Hermes controls its own visual presentation
-- Local network permission handling for Android 16+ so LAN-hosted Hermes WebUI instances can load inside the WebView. A confirmed permission error can prompt for access even when the host was not recognized in advance. A failed form submission prompts without automatically replaying the form; Retry and Open in browser return to the configured server so the action can be started again. An older sign-in page reached with Back may also require a manual retry.
-- Microphone compatibility handling so trusted Hermes pages can use Android-supported capture paths
-- Spoken replies can play without a fresh tap on the trusted WebUI route. Android denies new microphone requests while not resumed and dispatches a proposed `hermes-app-foreground` host signal; current WebUI does not consume it. Stopping existing capture/playback and requiring explicit re-arm depend on WebUI support (tracked in [#120](https://github.com/hermes-webui/hermes-android/pull/120)).
-- OAuth/OIDC callback handling that keeps trusted sign-in flows in-app until the declared Hermes callback returns
-- WebView passkey integration uses the same AndroidX Credential Manager dependency across app variants, without a Google Play Services adapter in any build. End-to-end availability remains unverified and depends on the installed Android/WebView and credential provider; omitting the optional adapter may limit compatibility on older devices. The identity-provider's sign-in domain must also publish Digital Asset Links for the exact app package and signing certificate. Some providers, including Pocket ID, may reject Android-app WebAuthn origins even with that association.
-- Reverse-proxy sign-in redirects (such as Authelia) can continue in-app after you confirm the server and login origins; `/api/status` does not need to be exposed outside proxy authentication. If that sign-in gateway (for example TinyAuth) starts its own OAuth/OIDC sign-in whose callback returns to the same gateway, the identity-provider pages also stay in the app so the gateway keeps its sign-in cookie.
-- Optional **Settings → Connection → Sign in with Chrome** (off by default) opens OAuth/OIDC sign-in pages in a Chrome Auth Tab, where browser passkeys work, and returns the callback to the app. It needs Chrome 137 or newer, an `https://` callback, and the callback host (Hermes for Hermes sign-in, or the sign-in gateway such as `auth.example.com`) must publish `/.well-known/assetlinks.json` for this app. **Copy assetlinks.json** in that setting copies the file for the exact build you have installed; Play, GitHub, F-Droid and debug builds each need their own entry. If Chrome is missing, too old, or the callback is `http://`, sign-in stays in the app. If Chrome cannot verify the app, you can **Continue in app** instead.
-- When a recognized sign-in request falls back to the WebView, the app records a reason without its URL or OAuth parameters in its diagnostic breadcrumbs. This does not establish that every provider flow can be recognized or that a live Auth Tab round trip succeeds.
-- Proxy-level HTTP Basic challenges on the configured server show a native username/password prompt with the password masked. The app no longer saves sign-ins from this prompt or automatically supplies previously remembered sign-ins. WebView may reuse an entered sign-in in memory for the same origin. Credentials embedded in a saved server URL remain part of that URL and may be sent automatically. Edit the URL to remove them, and also check the server name: leaving the name blank when adding a server copies the full URL into it, so it may need editing too. Startup, reconnect, notification taps and workspace recovery reject old routes with different URL credentials; Back skips entries with those credentials on the server host. Main-frame requests exposing outdated URL credentials for a selected or previously selected server in the current activity are blocked, including POST and popup handoffs. If history contains outdated credentials when the server changes, the app clears that history. This is not a sign-out and does not clear WebView's authentication cache. Data from the former Remember setting is inactive and can be deleted under **Settings → Connection → Forget saved sign-ins**; this does not change server URLs or names. Basic-auth challenges from other hosts are rejected.
-- Delayed WebView callbacks during a server change can still affect the displayed route or error state when their URL credentials are unchanged or absent. The app keeps the existing WebView rather than resetting it to separate those callbacks; navigation can still discard page state. This limitation remains tracked in [#184](https://github.com/hermes-webui/hermes-android/issues/184).
-
-### Real Android integration
-
-- File uploads and downloads, including direct camera capture when pages request image capture
-- Chat and Files downloads keep server-provided filenames and extensions, including UTF-8 names
-- Downloads save to the shared Download folder on Android 10+, so they appear in Files > Downloads
-- Share-to-app intake for text and files
-- Android-backed browser notifications for Hermes WebUI alerts
-- One notification for the optional quiet Settings shortcut (only while
-  Hermes is visible), background WebUI monitoring/reconnect work, and the
-  latest browser message, shared by both frontends. Pending approvals take
-  priority over messages. Leaving the app removes the idle shortcut, not an
-  unread message or Android's required active-work notification. Disabling
-  **While open or working** turns off the shortcut and background monitoring,
-  not browser messages; use **Android notification settings** to mute those.
-  Update/download and opt-in debug-capture notifications remain separate.
-  No idle foreground service or process-survival guarantee is added.
-- WebUI browser alerts for an idle current session offer **Reply** directly
-  in the notification. This uses the existing signed-in session cookie and
-  WebUI chat endpoint; it does not open the app or replace a composer draft.
-  Enable notifications in WebUI as well as Android. Replies expire after
-  30 minutes, closing Hermes, a server switch, or process death; an expired
-  action cannot send; reopen the conversation instead. Stale actions cannot
-  replace a newer alert. Rejections and uncertain delivery
-  are shown explicitly, with no automatic resend. WebView-only HTTP Basic
-  credentials and client-certificate challenges cannot be reused by this
-  cookie-backed native request. Official Webapp direct reply is not supported.
-  An alert received while approval is pending stays read-only even after the
-  approval clears: open the conversation to reply, rather than assuming it is
-  still idle. Unread text can survive process restart, but Reply actions cannot;
-  obsolete actions report that they are unavailable without replacing newer alerts.
-- Persistent authenticated session-stream monitoring (`/api/session/stream`) for trusted WebUI `/session/{id}` pages (including server mount prefixes), with reconnect polling fallback when live streaming is unavailable
-- Optional debug-log capture with persistent foreground notification and one-tap stop action
-- Channel-aware app updates: Play uses in-app update flow, GitHub APK builds download and hand off to installer in-app
-- GitHub APK updates surface a stateful in-app action flow (`Check` -> `Download` -> `Install`) and still show an install-ready notification when Hermes is backgrounded
-- **About** and **Updates** are together at the bottom of Settings: see the
-  installed version, check/download/install for your build channel, and open
-  the latest GitHub release notes. GitHub checks retain the latest release
-  summary even when there is no newer APK; GitHub notes are not a claim about
-  which version Google Play has delivered. The manual notes link works in
-  every build, without enabling an update provider in F-Droid or debug builds.
-
-### Security and trust boundaries
-
-- Only `http://` and `https://` Hermes hosts are supported in-app
-- Allowlisted Hermes navigation stays in-app; other web links are externalized
-- Non-web schemes are blocked
-- HTTPS in the app uses Android's system and user-installed CA stores; normal certificate-chain and hostname checks remain enabled. User-installed CAs apply app-wide, not just to one server profile.
-- Notification routing, microphone access, and callback handling stay scoped to trusted Hermes origins
-- Proxy sign-in approval lasts five minutes and permits only the server and confirmed login origins. It does not grant the login site Hermes notification, microphone, or download privileges; unrelated redirect destinations remain external.
-- Local settings are encrypted with Android Keystore-backed storage
-- Optional VPN/Tailscale startup guard for Tailscale-addressed Hermes servers (`*.ts.net`, Tailscale CGNAT/ULA ranges)
-- Optional VPN launch-app picker with search plus a Tailscale default package fallback before Android VPN settings when the VPN/Tailscale guard blocks a server load; Hermes first asks Tailscale to connect while keeping Hermes on screen, keeps an every-second `/api/status` probe alive, automatically reloads once VPN and server are ready, and only opens Tailscale if auto-connect has not established a tunnel within ten seconds
-
-## What It Feels Like
-
-When Hermes-Android is doing its job well, the experience should be simple:
-
-- Open the app and land in your actual Hermes environment
-- Stay inside Hermes for trusted work instead of bouncing between browser surfaces
-- Use Android-native sharing, capture, notifications, and recovery where the phone should help
-- Keep Hermes WebUI as the source of truth for product behavior and interface flow
-
-## Availability
-
-Hermes-Android currently publishes through two release channels, with a third
-pending:
-
-- Google Play production via the `play` build
-- GitHub APK distribution via the side-by-side `github` build
-- F-Droid (pending inclusion, [#141](https://github.com/hermes-webui/hermes-android/issues/141)):
-  F-Droid builds the Play-free `release` build from source at each `v<version>`
-  tag and signs it with its own key. After inclusion, no extra release step is
-  needed.
-
-Only the Play build contains Google Play/Play Services libraries (Play Core
-in-app updates). Every build uses the same AndroidX Credential Manager
-dependency, without the optional Play Services adapter; GitHub and F-Droid
-builds contain no Google Play or Firebase code.
-
-Current checked-in release metadata:
-
-- Version name: `1.3.5`
-- Version code: `10305`
-- Play application ID: `com.hermeswebui.android`
-- GitHub application ID: `com.hermeswebui.android.github`
-- F-Droid application ID: `com.hermeswebui.android.fdroid`
-- Compile SDK / target SDK: `37`
-- License: [MIT](LICENSE)
-
-If you want access to the Play release, install from Google Play or sideload the
-GitHub APK from the [Releases page](https://github.com/hermes-webui/hermes-android/releases).
-
-## Quick Start
-
-```powershell
-git clone https://github.com/hermes-webui/hermes-android.git
-cd hermes-android
-.\gradlew.bat assembleDebug --no-daemon
+```sh
+mkdir -p ~/.hermes/hooks/hermes-android-ack
+cp gateway-patches/hermes-android-ack/{HOOK.yaml,handler.py} \
+  ~/.hermes/hooks/hermes-android-ack/
 ```
 
-Open the repository in Android Studio to run on an emulator or device.
+Restart the gateway and check its log for `Loaded hook 'hermes-android-ack'`.
+Without this hook, alerts still work, but a notification reply may remain
+unconfirmed. Recheck the hook after every Hermes Agent update because it
+depends on gateway internals.
 
-Requirements:
+## Quick assistant
 
-- Android Studio with Android SDK 37
-- JDK 17 or newer compatible with Gradle
-- A reachable official Hermes Webapp or Hermes WebUI URL over HTTP or HTTPS
+**Ask Hermes** is a compact panel that opens over another app. Start it from a
+launcher shortcut, Android's text-selection menu, or an automation/activity
+launcher. It can draft a question, search, translate, summarize, and attach up
+to four photos. Sending always requires your tap.
 
-## Configuration
+The panel creates a separate chat, streams its answer, supports approvals, and
+can hand the conversation to the native chat screen. A free-form question that
+needs a fuller context opens in the app.
 
-Default app strings live in:
+## Privacy and security
 
-- `app/src/main/res/values/strings.xml`
+- The app communicates with the Hermes server you configure. It has no
+  advertising or analytics SDK.
+- Sign-in and authorization remain on the server's own pages. Cookies and
+  settings are stored locally; secure the phone and the server route.
+- Notification previews are configurable. With previews disabled, question
+  alerts do not offer answer buttons.
+- WebView navigation, external intents, download handoff, OAuth returns, and
+  notification actions have separate origin and trust checks. Do not treat a
+  cosmetic server label as a security signal.
+- The project accepts user-installed certificate authorities for managed/private
+  deployments, but it does not bypass certificate or hostname validation.
 
-Important values:
+## Known limits
 
-- `default_server_url` - default Hermes WebUI URL
-- `default_dashboard_url` - optional explicitly configured dashboard origin used only for Android-side Custom Tab matching
-- `app_name` - Android launcher label
+- A turn that starts and finishes between monitor discovery intervals can be
+  missed if the chat was not already being watched.
+- The monitor follows the active gateway profile; bot chats in another profile
+  are not watched in the background.
+- A prompt answered on another device may stay visible until you open Hermes;
+  the gateway does not emit a dismissal event for every remote action.
+- Some account, provider, and advanced configuration workflows remain Webapp-only.
 
-Android identity and app-level wiring live in:
+## Build from source
 
-- `app/build.gradle.kts`
-- `app/src/main/AndroidManifest.xml`
-- `settings.gradle.kts`
+Install JDK 17 and the Android SDK, then use the included Gradle wrapper:
 
-The shipped WebUI default is a placeholder HTTPS origin and the shipped
-dashboard default is blank. In normal use, WebUI owns dashboard auto-detect and
-persistence.
+```sh
+./gradlew testDebugUnitTest assembleDebug
+```
 
-## Build, Signing, and Release
+The F-Droid-oriented `release` build has no Google Play dependencies:
 
-Local signed release builds use an untracked repo-root `keystore.properties`
-file. CI builds use the corresponding `ANDROID_KEYSTORE_*` environment
-variables and secrets.
+```sh
+./gradlew verifyFossDependencies assembleRelease
+```
 
-Local signing setup:
-
-1. Copy `keystore.properties.example` to `keystore.properties`.
-2. Fill in the real keystore path and passwords.
-3. Keep that file untracked.
-
-Example:
+To stage a signed GitHub-release APK, create an untracked
+`keystore.properties` in the repository root:
 
 ```properties
-storeFile=C:/path/to/upload-keystore.jks
-storePassword=replace-me
-keyAlias=upload
-keyPassword=replace-me
+storeFile=/path/to/release.jks
+storePassword=…
+keyAlias=…
+keyPassword=…
 ```
 
-Useful commands:
+Then run:
 
-```powershell
-.\gradlew.bat test --no-daemon
-.\gradlew.bat lintDebug --no-daemon
-.\gradlew.bat assembleDebug --no-daemon
-.\gradlew.bat stageGithubReleaseApk --no-daemon
-.\gradlew.bat printReleaseVersionName --no-daemon
+```sh
+./gradlew stageReleaseArtifacts
 ```
 
-Device check:
+The staged artifact is `build/release/hermes-next-v<version>-github.apk`.
+Install a compatible signed update with `adb install -r <apk>` to keep local
+app data; a different signing key is a different Android app identity.
 
-```powershell
-.\gradlew.bat connectedDebugAndroidTest --no-daemon
-```
+### Release metadata
 
-Repository tooling checks can be run with:
+- Version name: `1.0.0`
+- Version code: `10000`
 
-```powershell
-python -m unittest discover -s tools/tests -p 'test_*.py' -v
-python tools/check_markdown.py
-```
+`tools/bump_version.py` keeps the version, F-Droid changelog, roadmap, and the
+two lines above aligned for a release. See [RELEASE.md](RELEASE.md) for the
+full publishing checklist.
 
-The docs-only CI short-circuit is fail-safe: only a non-empty diff containing
-Markdown files exclusively can skip the Android Gradle gates. Unreadable,
-empty, invalid, renamed, or mixed diffs run the full suite.
+## Project map
 
-CI runs the full debug unit suite, including Android voice ownership,
-microphone permission lifecycle, and selected-server navigation regressions.
-Android source/build changes run
-unfiltered instrumentation on API 35 and 36; releases repeat the full API 36
-suite. Selected-server instrumentation uses isolated encrypted preferences to
-check active-profile repair, edited-server persistence, allowlists, and
-startup/reconnect trust. Tooling contracts reject narrowed test commands.
-These Android checks do not prove upstream WebUI's foreground-event consumer
-or end-to-end voice conversation behavior.
+| Path | Responsibility |
+|---|---|
+| `app/src/main/java/com/hermeswebui/android/assistant/` | Native chat screens, quick assistant, gateway-backed conversation state, and server tools |
+| `app/src/main/java/com/hermeswebui/android/webapp/` | Gateway frames, alerts, monitor state, replay, and Webapp coordination |
+| `app/src/main/java/com/hermeswebui/android/background/` | Foreground services and background reconnection policies |
+| `app/src/main/java/com/hermeswebui/android/webview/` | Hardened WebView configuration, downloads, media, and clipboard handling |
+| `app/src/main/java/com/hermeswebui/android/core/security/` | URL, origin, and WebView trust policies |
+| `gateway-patches/hermes-android-ack/` | Optional Hermes gateway hook for notification receipts |
+| `tools/qa/` | Live WebView compatibility checks |
 
-Release automation is centered on:
+For design constraints, supported behaviour, and contributor guidance, read
+[ARCHITECTURE.md](ARCHITECTURE.md), [ROADMAP.md](ROADMAP.md), and
+[AGENTS.md](AGENTS.md) before changing platform code.
 
-- `.github/workflows/1-orchestration-release.yml`
-- `.github/workflows/2-publish-github-apk.yml`
+## Credits and license
 
-Optional/manual Play workflows:
+Hermes Next builds on [hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android)
+(MIT). Hermes Agent and its official Webapp are created by
+[Nous Research](https://github.com/NousResearch/hermes-agent).
 
-- `.github/workflows/3-publish-play-store-production.yml`
-- `.github/workflows/play-store-beta-manual.yml`
-
-That flow builds:
-
-- `hermes-webui-v<version>-github.apk` for GitHub/device installs
-- `hermes-webui-v<version>.aab` for Google Play production
-
-Release orchestration builds the reviewed `appVersionName` already checked into
-Git and never commits or pushes source changes. `versionCode` is derived from
-semantic version as `major*10000 + minor*100 + patch`; update the Gradle and
-README metadata together before starting a release.
-
-See [RELEASE.md](./RELEASE.md) for the operator workflow, including the phone
-and tablet GitHub APK acceptance checklist and the human approval gate before
-any push, tag, release, or secret change. Android updates always hand off to
-the system installer; no silent install is promised.
-
-## Architecture
-
-Core runtime areas:
-
-- `MainActivity.kt` - Android platform boundary, WebView host, intents, dashboard Custom Tab handoff
-- `core/security/` - URL policy and trust-boundary decisions
-- `data/` - encrypted settings persistence and local state
-- `domain/` - validation and share-intent parsing
-- `notification/` - Hermes notification bridge and Android notification presentation
-- `background/` - reconnect, debug logging, and foreground-service coordination
-- `server/` - startup preflight and server profile validation/switching
-- `update/` - Play and GitHub update checks and update UX
-- `ui/` - Compose screens and ViewModel state
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the detailed runtime flow and
-security model.
-
-## Documentation
-
-- [ROADMAP.md](./ROADMAP.md) - project status, maintenance posture, and wishlist
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - runtime flow, boundaries, and extension points
-- [RELEASE.md](./RELEASE.md) - release operator workflow and retry path
-- [AI_USE.md](./AI_USE.md) - AI-assisted development approach, review, validation, and accountability
-- [AGENTS.md](./AGENTS.md) - repository instructions for AI assistants
-- [assets/](./assets/) - README images, branding assets, icons, and TWA handoff files
-
-## AI-assisted Development
-
-Hermes-Android uses AI-assisted development openly as part of implementation,
-investigation, and documentation work.
-
-Architecture, security boundaries, validation criteria, and release decisions
-remain under human ownership. AI output is reviewed as proposed engineering
-work, not treated as authoritative by default.
-
-See [AI_USE.md](./AI_USE.md) for the full policy and workflow.
-
-</details>
+Licensed under the [MIT License](LICENSE).
