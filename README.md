@@ -2,23 +2,24 @@
 
 <img src="app/src/main/res/drawable-nodpi/hermes_agent_icon.png" width="112" alt="Hermes icon">
 
-# Hermes for Android
+# Hermes Next
 
-**The official Hermes Agent Webapp on your phone, connected even when it isn't on screen.**
+**A native Android client for the official Hermes Agent Webapp: your chats, bots and tools without the web page, connected even when the app isn't on screen.**
 
+[![Download](https://img.shields.io/github/v/release/zimza1abim/hermes-next-android?label=download&logo=android&color=B04F7D)](https://github.com/zimza1abim/hermes-next-android/releases/latest)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#-build)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)](#-build)
 [![Target SDK](https://img.shields.io/badge/targetSdk-37-4285F4)](#-build)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Fork of hermes-android](https://img.shields.io/badge/fork%20of-hermes--webui%2Fhermes--android-555?logo=github)](https://github.com/hermes-webui/hermes-android)
+[![Based on hermes-android](https://img.shields.io/badge/based%20on-hermes--webui%2Fhermes--android-555?logo=github)](https://github.com/hermes-webui/hermes-android)
 
-[Highlights](#-highlights) ·
+[Download](#-download) ·
 [Native chats](#-native-chats) ·
+[Highlights](#-highlights) ·
 [How it works](#-how-it-works) ·
 [Notifications](#-notifications) ·
 [Gateway hook](#-gateway-hook) ·
 [Assistant](#-quick-assistant) ·
-[Settings](#%EF%B8%8F-settings) ·
 [Limits](#-known-limits) ·
 [Build](#-build)
 
@@ -26,57 +27,77 @@
 
 ---
 
-A fork of [hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android)
-built around the **official Hermes Agent Webapp**. The upstream app already
-hosts the Webapp in a hardened WebView. This fork adds what a phone needs on
-top: a gateway connection that keeps working in the background, instant native
-alerts, and answering Hermes straight from the notification.
+Hermes Next is built on [hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android),
+which hosts the official Hermes Agent Webapp in a hardened WebView. Hermes Next
+replaces the page with **native chat screens** for everyday use and adds what a
+phone needs on top: a gateway connection that keeps working in the background,
+instant native alerts, and answering Hermes straight from the notification.
 
 > [!NOTE]
-> Everything above the line at the bottom describes this fork. The upstream
+> Everything above the line at the bottom describes Hermes Next. The upstream
 > README is kept unchanged in a folded section at the end.
+
+## 📦 Download
+
+Get the APK from [Releases](https://github.com/zimza1abim/hermes-next-android/releases/latest).
+
+| | |
+|---|---|
+| **Package** | `dev.hermes.next` |
+| **Version** | 1.0.0 |
+| **Requires** | Android 8.0 or later, and a Hermes Webapp server you can sign in to |
+| **Signing certificate (SHA-256)** | `8b43044272e0affee5cc1de7a7456994c80e033700fca858ed617c47356094eb` |
+
+It installs next to the upstream Hermes app (`com.hermeswebui.android`) as a
+separate app, so sign in again after installing. Enter your server address on
+first start, sign in on the server's own page, and the native chats take over.
+
+## 📱 Native chats
+
+The app icon opens native screens, not the Webapp page. They talk to the
+gateway socket and the server's HTTP API directly, in one rose style.
+
+| Screen | What it does |
+|---|---|
+| **Chats** | Every chat, newest first, plus one tab for the main bot and one per bot. Swipe sideways between tabs. Bot chats, app chats, messaging threads (Telegram and others) and cron runs are separate sections |
+| **Chat actions** | Long-press a chat to rename, pin, archive or delete it. Changes are saved on the server, so every device sees them |
+| **Unread and running** | A blinking dot marks a chat with an answer being written or one you haven't read. Opening a chat marks it read everywhere |
+| **Conversation** | Earlier transcript, live answers, stop, photos, approvals, model and reasoning level. Opening another chat leaves a running answer to finish on the server |
+| **Answers** | Headings, lists, quotes, tables and an editor-style code block with line numbers, token colours and copy |
+| **Bots** | Each bot's picture and @name head its answers; a bot without a picture shows the Hermes icon |
+| **Cron jobs** | Every profile's jobs: run now, pause, resume |
+| **Skills · tools · MCP** | What the selected bot has and what is switched on, with search |
+| **Install** | Plugins and MCP servers from the Hermes catalog, with search and a confirmation before anything is installed |
+| **Archived chats** | Chats you archived, and a button to bring each back |
+| **Font** | Any Galaxy font installed on the phone, applied to every native screen |
+
+- **No page to boot.** A chat opens about a second after the tap; the Webapp page
+  took about 12 seconds from a cold start over the same link.
+- **Notifications open the chat natively.** Tapping an alert opens that chat in
+  the native screens.
+- **The font is loaded before the first frame.** The picked font's file is copied
+  into the app and read synchronously at start, so nothing is drawn in another
+  font first.
+- **The Webapp is still there** for sign-in and anything the native screens do
+  not cover (Menu › Open Webapp). Back returns to the native chats. Menu ›
+  "Start on this screen" switches the app icon back to the Webapp.
+
+> [!NOTE]
+> The gateway's wire protocol is not a public API. A Hermes update can change it,
+> and the native screens depend on more of it than the background monitor does.
 
 ## ✨ Highlights
 
 | | |
 |---|---|
+| 📱 **Native chats** | Chats, bots, cron, skills, MCP and installs without the Webapp page. |
 | 🔌 **Always connected** | A native gateway monitor keeps watching your chats while the app is hidden or swiped away. |
 | ⚡ **Instant alerts** | Finished, failed, approval and question alerts arrive as they happen, not 30 seconds late. |
 | 💬 **Answer in place** | Allow or deny a command, pick a choice or type a reply without opening the app. |
 | ✅ **Confirmed answers** | A notification answer counts only once the gateway confirms it. |
-| 🧭 **Tap to open** | Tapping an alert opens that exact chat and closes the side menu. |
 | 🖥️ **Chats from anywhere** | Chats started on another device are found and watched too. |
 | 🔁 **Nothing missed** | Events from a dropped connection are replayed when it comes back. |
 | 🌸 **Quick assistant** | A small panel over any app: ask, search, translate or summarize, with photos, without opening the full app. |
-| 🎨 **Hermes branding** | App name **Hermes**, the Hermes Agent launcher icon, and matching notification icons. |
-
-## 📱 Native chats
-
-The app icon opens a native screen, not the Webapp page. It talks to the gateway
-socket and the server's HTTP API directly, in the same rose style as the quick
-assistant panel.
-
-| Screen | What it does |
-|---|---|
-| **Chats** | Recent chats with preview and time, search, and a tab for general chats and one per bot |
-| **Conversation** | Earlier transcript, live answers, stop, photos, approvals, code blocks that scroll and copy, model and reasoning level |
-| **Bots** | Each bot's picture and @name head its answers; a bot without a picture shows the Hermes icon |
-| **Cron jobs** | Every profile's jobs: run now, pause, resume |
-| **Skills · tools · MCP** | What the selected profile has, and what is switched on |
-| **Font** | Any Galaxy font installed on the phone, applied to every native screen |
-
-- **No page to boot.** A chat opens about a second after the tap; the Webapp page
-  took about 12 seconds from a cold start over the same link.
-- **The font is loaded before the first frame.** The picked font's file is copied
-  into the app and read synchronously at start, so nothing is drawn in another
-  font first.
-- **The Webapp is still there** for sign-in and everything the native screens do
-  not cover (Menu › Open Webapp). Menu › "Start on this screen" switches the app
-  icon back to it.
-
-> [!NOTE]
-> The gateway's wire protocol is not a public API. A Hermes update can change it,
-> and the native screens depend on more of it than the background monitor does.
 
 ## 🧠 How it works
 
@@ -171,7 +192,7 @@ notifications are held back so they never duplicate a native one.
 - 🗂️ **Grouped per chat**, with a summary once a chat has two alerts.
 - 🔒 **Private on the lock screen.** It shows only "Hermes" and the reason.
 - 🧹 **Clean tray.** Opening the app clears its Hermes alerts.
-- 🧭 **Tap opens that chat.** The side menu closes first if it was open.
+- 🧭 **Tap opens that chat**, in the native screens.
 
 > [!IMPORTANT]
 > A notification answer is shown as sent only after the gateway confirms it.
@@ -221,7 +242,7 @@ grows a little once a chat starts, and has an expand button for long answers.
 | From | How |
 |---|---|
 | Launcher icon | Long-press **Hermes** › **Ask Hermes** or **Photo question** |
-| Galaxy Modes and Routines, Tasker | App activity `com.hermeswebui.android.assistant.AssistantActivity` |
+| Galaxy Modes and Routines, Tasker | App `dev.hermes.next`, activity `com.hermeswebui.android.assistant.AssistantActivity` |
 | A link or Tasker URL | `hermes://assistant`, with optional `mode=ask\|search\|translate\|summary`, `text=…` and `attach=camera` |
 | Selected text | **Translate with Hermes** in the text selection menu sends it at once |
 
@@ -238,7 +259,7 @@ same values work as intent extras named `mode`, `text` and `attach`.
   signed-in provider's models with search, and the reasoning level. The choice
   applies to that chat only and is remembered for the next one.
 - Approvals can be answered in the panel. Questions open the chat in the app.
-- **Open in app** jumps to the same chat in the Webapp.
+- **Open in app** jumps to the same chat in the native screens.
 - Answers stream in gently, with links, code and lists rendered. Copy, ask again,
   or replace the selected text with a translation.
 
@@ -269,6 +290,8 @@ Everything is under **Application Settings › Notifications**:
 | A prompt answered on another device stays in the tray | The gateway sends no event for that. Opening the app clears it |
 | The assistant connects through the network path you have | Its first connect costs a ticket and a socket round trip to the server; it stays connected for 3 minutes after you close it |
 | Your own message sent from another device appears late | The gateway doesn't relay user messages to other clients. It shows up once the turn is saved |
+| A chat's newest line shows only for chats opened on this phone | The server's preview is the head of the first question; the app keeps the newest line of chats it has shown |
+| Some menus are Webapp-only | Changing Hermes's default model, switching skills or MCP servers on and off, uninstalling, and MCP servers that need keys or a sign-in |
 
 ## 🛠 Build
 
@@ -288,8 +311,12 @@ keyAlias=…
 keyPassword=…
 ```
 
-The APK lands in `app/build/outputs/apk/release/`. Install it over an existing
-build with `adb install -r` to keep your sign-in.
+The APK lands in `app/build/outputs/apk/release/` as `hermes-next-v<version>-release.apk`.
+Install it over an existing build with `adb install -r` to keep your sign-in; an
+update must be signed with the same key.
+
+The package is `dev.hermes.next`, while the code keeps the upstream
+`com.hermeswebui.android` namespace so upstream changes still merge cleanly.
 
 <details>
 <summary><strong>Where things live</strong></summary>
@@ -306,7 +333,12 @@ build with `adb install -r` to keep your sign-in.
 | `webui/HermesWebUiScripts.kt` | Scripts injected into the Webapp page |
 | `assistant/AssistantMachine.kt` | The assistant's reducer: connection, chat and turns |
 | `assistant/AssistantController.kt` | Runs the reducer, photos and model choices for the panel |
-| `assistant/AssistantScreen.kt` | The panel UI |
+| `assistant/AssistantScreen.kt` | The panel UI, and the answer and code-block rendering both screens share |
+| `assistant/ChatActivity.kt` | The native chats: list, conversation and menu panes |
+| `assistant/ChatScreen.kt` | The chat list, swipe tabs, chat actions and the conversation screen |
+| `assistant/ChatMenus.kt` | Menu, cron, skills · tools · MCP, install, archived chats and font screens |
+| `assistant/HermesAdmin.kt` | The server's HTTP API: cron, capabilities, catalogs, chat changes |
+| `assistant/AssistantTheme.kt` | Colours and text styles of every native screen |
 | `webapp/SignInGate.kt` | Serializes sign-in ticket requests for the monitor and the assistant |
 | `gateway-patches/hermes-android-ack/` | The gateway hook |
 
@@ -318,7 +350,7 @@ Paths under `webapp/`, `assistant/`, `background/` and `webui/` are in
 ## 📜 Credits
 
 Built on [hermes-webui/hermes-android](https://github.com/hermes-webui/hermes-android)
-(MIT). The Hermes Agent and its Webapp are by
+(MIT), whose license and copyright notice are kept in [LICENSE](LICENSE). The Hermes Agent and its Webapp are by
 [Nous Research](https://github.com/NousResearch/hermes-agent).
 
 ---
