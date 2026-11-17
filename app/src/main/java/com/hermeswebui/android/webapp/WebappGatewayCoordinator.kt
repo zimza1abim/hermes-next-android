@@ -81,6 +81,21 @@ class WebappGatewayCoordinator private constructor(
 
     private fun isKnown(): Boolean = watchKey()?.let { watchPrefs.getBoolean(KNOWN_PREFIX + it, false) } == true
 
+    private var connectedListener: (() -> Unit)? = null
+    private var announcedDoc: Any? = null
+
+    /** [listener] runs each time a Webapp page connects its gateway socket, which it does only when signed in. */
+    fun onWebappConnected(listener: (() -> Unit)?) {
+        connectedListener = listener
+    }
+
+    private fun announceConnected() {
+        val doc = state.doc
+        if (doc == announcedDoc) return
+        announcedDoc = doc
+        if (doc != null) connectedListener?.invoke()
+    }
+
     /** Remembers that this server showed a Webapp document, so the next process needs no page to monitor it. */
     private fun rememberKnown() {
         if (knownSaved || !state.webappActive) return
@@ -206,6 +221,12 @@ class WebappGatewayCoordinator private constructor(
         return true
     }
 
+    /** The durable id of a session the monitor saw, which is what a chat is opened by. */
+    fun storedIdOf(sessionId: String): String? = state.sessions[sessionId]?.storedId
+
+    /** The stored ids of the chats the monitor knows an answer is being written in. Main thread only. */
+    fun runningStoredIds(): Set<String> = state.sessions.values.filter { it.running }.mapNotNull { it.storedId }.toSet()
+
     /** Detach the Activity without taking down the background monitor. */
     fun dispose(owner: Any) {
         if (uiOwner !== owner) return
@@ -248,6 +269,7 @@ class WebappGatewayCoordinator private constructor(
             if (trayChanges.isNotEmpty()) refreshGroups(trayChanges.toMap())
             persistWatch()
             rememberKnown()
+            announceConnected()
         } finally {
             trayChanges.clear()
             dispatching = false

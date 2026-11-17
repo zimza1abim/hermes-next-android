@@ -239,27 +239,38 @@ object AssistantProtocol {
      */
     fun sidebar(reply: JSONObject): List<ChatRow>? {
         if (reply.optJSONObject("recents")?.optJSONArray("sessions") == null) return null
-        fun slice(name: String, kind: ChatKind): List<ChatRow> {
-            val rows = reply.optJSONObject(name)?.optJSONArray("sessions") ?: return emptyList()
-            return (0 until rows.length()).mapNotNull { index ->
-                val row = rows.optJSONObject(index) ?: return@mapNotNull null
-                val id = text(row, "id") ?: return@mapNotNull null
-                ChatRow(
-                    id = id,
-                    title = text(row, "title"),
-                    preview = text(row, "preview")?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
-                    lastActiveAt = ((row.opt("last_active") ?: row.opt("started_at")) as? Number)?.toDouble(),
-                    running = row.opt("is_active") == true,
-                    pinned = row.opt("pinned") == true,
-                    profile = text(row, "profile"),
-                    defaultProfile = row.opt("is_default_profile") != false,
-                    kind = kind,
-                    source = text(row, "source").takeIf { kind == ChatKind.MESSAGING },
-                )
-            }
-        }
+        fun slice(name: String, kind: ChatKind) = rows(reply.optJSONObject(name)?.optJSONArray("sessions"), kind)
         return (slice("recents", ChatKind.CHAT) + slice("messaging", ChatKind.MESSAGING) + slice("cron", ChatKind.CRON))
             .distinctBy { it.profile to it.id }
+    }
+
+    /** The archived chats of every profile (`/api/profiles/sessions?archived=only`), newest first. */
+    fun archived(reply: Any?): List<ChatRow>? =
+        (reply as? JSONObject)?.optJSONArray("sessions")?.let { rows(it, ChatKind.CHAT) }?.sortedByDescending { it.lastActiveAt ?: 0.0 }
+
+    const val ARCHIVED_PATH = "/api/profiles/sessions?archived=only&profile=all&limit=200&min_messages=1"
+
+    private fun rows(rows: JSONArray?, kind: ChatKind): List<ChatRow> {
+        rows ?: return emptyList()
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val id = text(row, "id") ?: return@mapNotNull null
+            ChatRow(
+                id = id,
+                title = text(row, "title"),
+                preview = text(row, "preview")?.let(AssistantMarkdown::plain)?.take(MAX_PREVIEW),
+                lastActiveAt = ((row.opt("last_active") ?: row.opt("started_at")) as? Number)?.toDouble(),
+                // The server's `is_active` only says the chat was used in the last five minutes; whether an
+                // answer is being written is known to the app itself (see AssistantController).
+                running = false,
+                pinned = row.opt("pinned") == true,
+                profile = text(row, "profile"),
+                defaultProfile = row.opt("is_default_profile") != false,
+                kind = kind,
+                source = text(row, "source").takeIf { kind == ChatKind.MESSAGING },
+                unread = row.opt("unread") == true,
+            )
+        }
     }
 
     /**

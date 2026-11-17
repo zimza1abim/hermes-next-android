@@ -146,6 +146,7 @@ import com.hermeswebui.android.ui.web.WebShell
 import com.hermeswebui.android.webapp.GatewayAlertKind
 import com.hermeswebui.android.webapp.WebappGatewayCoordinator
 import com.hermeswebui.android.assistant.ChatActivity
+import com.hermeswebui.android.background.HermesKeepAliveService
 import com.hermeswebui.android.assistant.NativeHome
 import com.hermeswebui.android.webui.HermesWebUiScripts
 import com.hermeswebui.android.webui.VoiceCaptureLifecycleGate
@@ -398,13 +399,44 @@ class MainActivity : ComponentActivity() {
         intent?.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER) &&
             NativeHome.enabled(this) && WebappGatewayCoordinator.isKnownWebapp(this)
 
+    /**
+     * A notification's chat, or the one the quick panel hands over, opens in the native chats when they
+     * are the home. Null when the Webapp page is what was asked for.
+     */
+    private fun nativeChat(intent: Intent?): Intent? {
+        if (intent?.action != HermesKeepAliveService.ACTION_OPEN_APP || intent.getBooleanExtra(HermesKeepAliveService.EXTRA_WEBAPP, false)) return null
+        if (!NativeHome.enabled(this) || !WebappGatewayCoordinator.isKnownWebapp(this)) return null
+        val chat = intent.getStringExtra(HermesKeepAliveService.EXTRA_OPEN_STORED_ID)
+            ?: intent.getStringExtra(HermesKeepAliveService.EXTRA_SESSION_ID)?.let { WebappGatewayCoordinator.obtain(this).storedIdOf(it) ?: it }
+        return Intent(this, ChatActivity::class.java).apply { if (!chat.isNullOrBlank()) putExtra(ChatActivity.EXTRA_CHAT, chat) }
+    }
+
+    /**
+     * The page is up only so the user can sign in (the first run, or a sign-in the native chats asked
+     * for): once the Webapp connects, the native chats take over and this screen leaves the task.
+     */
+    private var signInOnly = false
+    /** Left for the native chats: the app goes on, so its notifications stay. */
+    private var handedOff = false
+
+    /** Hands over to the native chats and leaves the task, so no Webapp page waits behind them. */
+    private fun goNative(target: Intent = Intent(this, ChatActivity::class.java)) {
+        handedOff = true
+        startActivity(target)
+        finish()
+        overridePendingTransition(0, 0)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null && opensNativeChats(intent)) {
-            startActivity(Intent(this, ChatActivity::class.java))
-            finish()
+        // Also on a recreated screen: a process restart must not bring back the page the user never asked for.
+        val native = nativeChat(intent) ?: Intent(this, ChatActivity::class.java).takeIf { opensNativeChats(intent) }
+        if (native != null) {
+            goNative(native)
             return
         }
+        signInOnly = NativeHome.enabled(this) && !isSettingsDeepLink(intent.data) &&
+            (intent.getBooleanExtra(HermesKeepAliveService.EXTRA_SIGN_IN, false) || !intent.getBooleanExtra(HermesKeepAliveService.EXTRA_WEBAPP, false))
 
         val defaultUrl = getString(R.string.default_server_url)
         val defaultDashboardUrl = getString(R.string.default_dashboard_url)
@@ -448,6 +480,7 @@ class MainActivity : ComponentActivity() {
             runOnUiThread = { action -> runOnUiThread(action) }
         )
         webappGateway = WebappGatewayCoordinator.obtain(applicationContext)
+        webappGateway.onWebappConnected { if (signInOnly && !isFinishing) goNative() }
         webappGateway.attachUi(
             owner = this,
             trusted = ::isTrustedNotificationBridgeSource,
@@ -569,10 +602,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (opensNativeChats(intent)) {
-            // The icon was tapped while this screen is still in the task: the chats open over it.
-            startActivity(Intent(this, ChatActivity::class.java))
+            // The icon was tapped while this screen is still in the task: the chats take its place.
+            goNative()
             return
         }
+        nativeChat(intent)?.let {
+            goNative(it)
+            return
+        }
+        if (intent.getBooleanExtra(HermesKeepAliveService.EXTRA_SIGN_IN, false)) signInOnly = NativeHome.enabled(this)
         setIntent(intent)
         if (appUpdateCoordinator.handleIntent(intent)) {
             return
@@ -640,7 +678,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing && ::notificationPresenter.isInitialized) {
+        if (::webappGateway.isInitialized) webappGateway.onWebappConnected(null)
+        if (isFinishing && !handedOff && ::notificationPresenter.isInitialized) {
             notificationPresenter.cancelOngoingNotification()
             NotificationReplyActions.clear()
         }
@@ -2471,9 +2510,11 @@ class MainActivity : ComponentActivity() {
                 if (offset != null && goBackInMainWebView(offset)) {
                     backPressExitStage = 0
                 } else {
-                    // Leave the workspace loaded: the background monitor keeps running either way,
-                    // so finishing would only add a full page load to the next open.
-                    handleExitBackPress { moveTaskToBack(true) }
+                    // Where the native chats are the home, Back returns to them. Otherwise the workspace
+                    // stays loaded: the monitor keeps running either way, and finishing would only add
+                    // a full page load to the next open.
+                    if (NativeHome.enabled(this) && WebappGatewayCoordinator.isKnownWebapp(this)) goNative()
+                    else handleExitBackPress { moveTaskToBack(true) }
                 }
             } else {
                 handleWebUiBackNavigation(onRequestExit)

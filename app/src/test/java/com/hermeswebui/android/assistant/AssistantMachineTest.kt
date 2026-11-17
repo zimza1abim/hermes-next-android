@@ -299,6 +299,35 @@ class AssistantMachineTest {
     }
 
     @Test
+    fun `the chats screen can leave a chat whose answer is being written`() {
+        connect()
+        feed(AssistantInput.OpenChat("stored-9", null))
+        feed(reply("session.resume") { copy(sessionId = "live-9", storedId = "stored-9", history = emptyList()) })
+        ask("again")
+        feed(reply("prompt.submit"))
+        assertThat(state.busy).isTrue()
+        feed(AssistantInput.OpenChat("stored-2", null))
+        assertThat(state.storedId).isEqualTo("stored-9")
+        feed(AssistantInput.OpenChat("stored-2", null, leave = true))
+        assertThat(state.storedId).isEqualTo("stored-2")
+        assertThat(state.turns).isEmpty()
+        // The answer is not stopped; it goes on at the server and no longer writes into this chat.
+        assertThat(sent.none { it.optString("method") == "session.interrupt" }).isTrue()
+        feed(frame(AssistantFrame.Delta("live-9", "late", 0, 0)))
+        assertThat(state.turns).isEmpty()
+    }
+
+    @Test
+    fun `a question not sent yet keeps its chat even when asked to leave`() {
+        feed(AssistantInput.Shown(true))
+        ask("first")
+        assertThat(state.turns.single().status).isEqualTo(TurnStatus.QUEUED)
+        feed(AssistantInput.OpenChat("stored-2", null, leave = true))
+        assertThat(state.storedId).isNull()
+        assertThat(state.turns).hasSize(1)
+    }
+
+    @Test
     fun `a turn this screen did not send is followed in the opened chat`() {
         connect()
         feed(AssistantInput.OpenChat("stored-9", null))

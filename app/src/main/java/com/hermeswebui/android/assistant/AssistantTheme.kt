@@ -28,6 +28,8 @@ internal object Rose {
     val Deep = Color(0xFFB04F7D)
     val ChipText = Color(0xFF8E3F66)
     val Text = Color(0xFF643C50)
+    /** Bold text and headings: a step darker than [Text], so emphasis reads at a glance. */
+    val Strong = Color(0xFF4A2638)
     val Muted = Color(0xFF866173)
     val Border = Color(0xFFEED6E2)
     val Dots = Color(0xFFEFCFDD)

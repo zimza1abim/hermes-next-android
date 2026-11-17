@@ -341,8 +341,8 @@ internal fun Conversation(state: AssistantState, replaceable: Boolean, actions: 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             state = list,
-            contentPadding = PaddingValues(top = 14.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            contentPadding = PaddingValues(top = 14.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             itemsIndexed(state.history, key = { index, _ -> "history-$index" }) { index, row ->
@@ -438,25 +438,33 @@ internal fun BotAvatar(image: ImageBitmap?, size: Dp, modifier: Modifier = Modif
 private fun BotName() {
     val bot = LocalBot.current ?: return
     Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        BotAvatar(bot.image, 38.dp)
-        Text("@${bot.name}", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Rose.Deep, maxLines = 1,
+        BotAvatar(bot.image, 42.dp)
+        Text("@${bot.name}", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = Rose.Deep, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
+/** The user's own words. A long one is cut at [maxLines] and opens in full on a tap. */
 @Composable
 internal fun QuestionBubble(text: String, maxLines: Int) {
     val shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
-    Text(
-        text,
-        style = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .shadow(6.dp, shape, ambientColor = Lilac.copy(alpha = 0.3f), spotColor = Lilac.copy(alpha = 0.3f))
-            .clip(shape).background(Rose.Bubble)
-            .padding(horizontal = 15.dp, vertical = 11.dp),
-    )
+    var open by remember(text) { mutableStateOf(false) }
+    var cut by remember(text) { mutableStateOf(false) }
+    Column(horizontalAlignment = Alignment.End) {
+        Text(
+            text,
+            style = RoseType.Body.copy(fontSize = 15.5.sp, lineHeight = 24.sp),
+            maxLines = if (open) Int.MAX_VALUE else maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!open) cut = it.hasVisualOverflow },
+            modifier = Modifier
+                .shadow(6.dp, shape, ambientColor = Lilac.copy(alpha = 0.3f), spotColor = Lilac.copy(alpha = 0.3f))
+                .clip(shape).background(Rose.Bubble)
+                .then(if (cut || open) Modifier.clickable(role = Role.Button) { open = !open } else Modifier)
+                .padding(horizontal = 15.dp, vertical = 11.dp),
+        )
+        if (cut || open) Text(if (open) "접기" else "전체 보기", style = RoseType.Meta.copy(color = Rose.ChipText), modifier = Modifier.padding(top = 5.dp, end = 6.dp))
+    }
 }
 
 /** One row of the transcript from before this screen's own turns. */
@@ -464,7 +472,7 @@ internal fun QuestionBubble(text: String, maxLines: Int) {
 private fun HistoryItem(row: HistoryRow, named: Boolean) {
     when (row.role) {
         HistoryRole.USER -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            Box(Modifier.widthIn(max = 300.dp)) { QuestionBubble(row.text, maxLines = 24) }
+            Box(Modifier.widthIn(max = 320.dp)) { QuestionBubble(row.text, maxLines = 12) }
         }
         HistoryRole.ASSISTANT -> Column {
             if (named) BotName()
@@ -478,7 +486,7 @@ private fun HistoryItem(row: HistoryRow, named: Boolean) {
 internal fun Answer(shown: String, writing: Boolean) {
     val blocks = remember(shown) { AssistantMarkdown.parse(shown) }
     SelectionContainer {
-        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
             blocks.forEachIndexed { index, block ->
                 val tail = writing && index == blocks.lastIndex
                 when (block) {
@@ -500,13 +508,13 @@ internal fun Answer(shown: String, writing: Boolean) {
 
 @Composable
 private fun HeadingBlock(block: AssistantMarkdown.Block.Heading) {
-    val size = when (block.level) { 1 -> 21.sp; 2 -> 18.5.sp; else -> 16.5.sp }
+    val size = when (block.level) { 1 -> 21.5.sp; 2 -> 19.sp; else -> 17.sp }
     val styled = remember(block) { AssistantMarkdown.inlineText(block.text) }
     Column(Modifier.padding(top = if (block.level <= 2) 6.dp else 2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // A petal marks a section; the two top levels also get a rule under them.
             Box(Modifier.size(width = 4.dp, height = if (block.level <= 2) 20.dp else 16.dp).clip(RoundedCornerShape(2.dp)).background(Rose.Rose))
-            Text(styled, style = RoseType.Body.copy(fontSize = size, lineHeight = size * 1.35f, fontWeight = FontWeight.Bold), modifier = Modifier.padding(start = 9.dp))
+            Text(styled, style = RoseType.Body.copy(fontSize = size, lineHeight = size * 1.35f, fontWeight = FontWeight.Bold, color = Rose.Strong), modifier = Modifier.padding(start = 9.dp))
         }
         if (block.level <= 2) Box(Modifier.fillMaxWidth().padding(top = 7.dp).height(1.dp).background(Rose.Border))
     }
@@ -514,7 +522,7 @@ private fun HeadingBlock(block: AssistantMarkdown.Block.Heading) {
 
 @Composable
 private fun ItemsBlock(block: AssistantMarkdown.Block.Items, tail: Boolean) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         block.items.forEachIndexed { index, item ->
             val last = tail && index == block.items.lastIndex
             val styled = remember(item, last) { AssistantMarkdown.inlineText(item.text, caret = last).let { if (last) shimmerTail(it) else it } }
@@ -533,7 +541,7 @@ private fun QuoteBlock(block: AssistantMarkdown.Block.Quote) {
     val styled = remember(block) { AssistantMarkdown.inlineText(block.text) }
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(10.dp)).background(Rose.Soft)) {
         Box(Modifier.fillMaxHeight().width(4.dp).background(Rose.Rose))
-        Text(styled, style = RoseType.Body.copy(fontSize = 15.sp, lineHeight = 24.sp, color = Rose.Muted), modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
+        Text(styled, style = RoseType.Body.copy(fontSize = 15.sp, lineHeight = 24.sp), modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp))
     }
 }
 
@@ -548,7 +556,7 @@ private fun TableBlock(block: AssistantMarkdown.Block.Table) {
                     val styled = remember(cells, column) { AssistantMarkdown.inlineText(cells.getOrElse(column) { "" }) }
                     Text(
                         styled,
-                        style = RoseType.Body.copy(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = if (row == 0) FontWeight.Bold else FontWeight.Normal),
+                        style = RoseType.Body.copy(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = if (row == 0) FontWeight.Bold else FontWeight.Normal, color = if (row == 0) Rose.Strong else Rose.Text),
                         modifier = Modifier.fillMaxWidth().widthIn(max = 240.dp)
                             .background(if (row == 0) Rose.Soft else if (row % 2 == 0) Rose.Field else Color.Transparent)
                             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -576,7 +584,7 @@ private fun CodeBlock(code: AssistantMarkdown.Code) {
             string = SpanStyle(color = Editor.String), number = SpanStyle(color = Editor.Number), keyword = SpanStyle(color = Editor.Keyword, fontWeight = FontWeight.SemiBold))
     }
     val numbers = remember(lines) { (1..lines).joinToString("\n") }
-    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp)
+    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, lineHeight = 21.sp)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Editor.Back).border(1.dp, Editor.Edge, RoundedCornerShape(16.dp))) {
         Row(Modifier.fillMaxWidth().background(Editor.Bar).padding(start = 14.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1076,13 +1084,14 @@ internal fun PhotoThumb(image: ImageBitmap?, size: Dp) {
     }
 }
 
+/** A round icon button. [filled] gives it a soft ground; [primary] makes it the screen's main action. */
 @Composable
-internal fun RoundIcon(icon: ImageVector, label: String, filled: Boolean = false, onClick: () -> Unit) {
+internal fun RoundIcon(icon: ImageVector, label: String, filled: Boolean = false, primary: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).padding(1.dp).clip(CircleShape).background(if (filled) Rose.Soft else Color.Transparent)
+        Modifier.size(42.dp).padding(1.dp).clip(CircleShape).background(if (primary) Rose.Deep else if (filled) Rose.Soft else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, null, tint = Rose.Muted, modifier = Modifier.size(20.dp)) }
+    ) { Icon(icon, null, tint = if (primary) Color.White else Rose.Muted, modifier = Modifier.size(if (primary) 22.dp else 20.dp)) }
 }
 
 @Composable

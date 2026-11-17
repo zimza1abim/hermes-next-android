@@ -79,6 +79,10 @@ class HermesKeepAliveService : Service() {
         const val ACTION_OPEN_APP = "com.hermeswebui.android.action.OPEN_WEBAPP"
         const val EXTRA_SESSION_ID = "com.hermeswebui.android.extra.WEBAPP_SESSION_ID"
         /** The stored id of a chat the assistant panel hands over; it waits for the page if the app had to start. */
+        /** Set by "open Webapp": the Webapp page is wanted even where the native chats are the home. */
+        const val EXTRA_WEBAPP = "com.hermeswebui.android.extra.WEBAPP_PAGE"
+        /** The Webapp page is opened to sign in: once it connects, the native chats take over again. */
+        const val EXTRA_SIGN_IN = "com.hermeswebui.android.extra.WEBAPP_SIGN_IN"
         const val EXTRA_OPEN_STORED_ID = "com.hermeswebui.android.extra.WEBAPP_OPEN_STORED_ID"
         private const val TAG = "HermesKeepAliveService"
 

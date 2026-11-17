@@ -189,11 +189,16 @@ class AssistantController private constructor(private val context: Context, priv
 
     fun refreshProfiles() = dispatch(AssistantInput.RefreshProfiles)
 
-    fun selectProfile(name: String?) {
-        dispatch(AssistantInput.SelectProfile(name))
+    /** A new chat with [name]'s bot. With [leave], an answer being written is left to finish at the server. False when a question is still on its way. */
+    fun selectProfile(name: String?, leave: Boolean = false): Boolean {
+        if (!canLeave(leave)) return false
+        dispatch(AssistantInput.SelectProfile(name, leave))
         pendingImages.value = emptyList()
         trimImages()
+        return true
     }
+
+    private fun canLeave(leave: Boolean) = _state.value.let { !it.busy || (leave && it.leavable) }
 
     /** Each bot's picture by profile name. The files are kept, so the pictures show before the socket is up. */
     val avatars = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
@@ -241,22 +246,82 @@ class AssistantController private constructor(private val context: Context, priv
     val chatsLoading = MutableStateFlow(false)
     private var chatsRead: SignInGate.Handle? = null
 
-    fun refreshChats() {
+    private val chatsWaiters = mutableListOf<() -> Unit>()
+
+    /** Reads the list again. [done] runs when a read ends, also when a newer read replaced this one. */
+    fun refreshChats(done: (() -> Unit)? = null) {
+        done?.let(chatsWaiters::add)
+        fun finished() {
+            chatsLoading.value = false
+            val waiting = chatsWaiters.toList()
+            chatsWaiters.clear()
+            waiting.forEach { it() }
+        }
         chatsRead?.cancel()
         chatsLoading.value = true
         chatsRead = readApi(AssistantProtocol.SIDEBAR_PATH) { reply ->
-            chatsLoading.value = false
-            reply?.let(AssistantProtocol::sidebar)?.let { chats.value = it }
-        } ?: run { chatsLoading.value = false; null }
+            reply?.let(AssistantProtocol::sidebar)?.let { chats.value = decorate(it) }
+            finished()
+        } ?: run { finished(); null }
+    }
+
+    /** The chats an answer is being written in: this screen's own, and those the background monitor follows. */
+    private fun runningIds(): Set<String> {
+        val current = _state.value
+        val own = if (current.activeTurn != null) setOfNotNull(current.storedId, current.openedId) else emptySet()
+        return own + WebappGatewayCoordinator.obtain(context).runningStoredIds()
+    }
+
+    /** The list as the app shows it: each row's newest line, and whether an answer is being written in it. */
+    private fun decorate(rows: List<ChatRow>): List<ChatRow> {
+        val running = runningIds()
+        return rows.map { row ->
+            val line = lastLines[row.id]
+            val busy = row.id in running
+            if ((line == null || line == row.preview) && busy == row.running) row else row.copy(preview = line ?: row.preview, running = busy)
+        }
+    }
+
+    /** A turn began or ended: the rows' running marks follow at once. */
+    private fun syncRunning() {
+        val rows = chats.value
+        if (rows.isEmpty()) return
+        val next = decorate(rows)
+        if (next != rows) chats.value = next
+    }
+
+    /*
+     * The server's preview of a chat is the head of its first question and never changes. The list shows
+     * the newest line instead for every chat this phone has shown: the line is kept here by chat id.
+     */
+    private val lastLines: MutableMap<String, String> = runCatching {
+        org.json.JSONObject(prefs.getString(KEY_LAST_LINES, "{}").orEmpty()).let { saved -> saved.keys().asSequence().associateWith { saved.optString(it) }.toMutableMap() }
+    }.getOrDefault(mutableMapOf())
+
+    /** Keeps the newest line of the chat on screen once nothing is being written in it. */
+    private fun rememberLastLine() {
+        val current = _state.value
+        if (current.busy) return
+        val turn = current.turns.lastOrNull()
+        val text = (turn?.answer?.takeIf { it.isNotBlank() } ?: turn?.question?.takeIf { it.isNotBlank() } ?: current.history.lastOrNull()?.text)
+            ?.let(AssistantMarkdown::plain)?.take(160)?.takeIf { it.isNotBlank() } ?: return
+        val ids = setOfNotNull(current.storedId, current.openedId)
+        if (ids.isEmpty() || ids.all { lastLines[it] == text }) return
+        ids.forEach { lastLines[it] = text }
+        while (lastLines.size > MAX_LAST_LINES) lastLines.remove(lastLines.keys.first())
+        prefs.edit().putString(KEY_LAST_LINES, org.json.JSONObject(lastLines as Map<*, *>).toString()).apply()
+        chats.value = decorate(chats.value)
     }
 
     /** Opens [row]; a chat of the server's own profile is reached without naming the profile. */
-    fun openChat(row: ChatRow) {
+    fun openChat(row: ChatRow, leave: Boolean = false): Boolean {
+        if (!canLeave(leave)) return false
         val own = _state.value.profiles.firstOrNull { it.own }?.name
         val profile = row.profile?.takeUnless { it == own || (own == null && row.defaultProfile) }
-        dispatch(AssistantInput.OpenChat(row.id, row.title, profile))
+        dispatch(AssistantInput.OpenChat(row.id, row.title, profile, leave))
         pendingImages.value = emptyList()
         trimImages()
+        return true
     }
 
     fun approve(request: com.hermeswebui.android.webapp.RpcId, allow: Boolean) = dispatch(AssistantInput.Approve(request, allow))
@@ -272,6 +337,8 @@ class AssistantController private constructor(private val context: Context, priv
                 effects.forEach(::execute)
             }
             syncShown()
+            rememberLastLine()
+            syncRunning()
             refreshFavouritesWhenReady()
         } finally {
             dispatching = false
@@ -327,6 +394,8 @@ class AssistantController private constructor(private val context: Context, priv
         private const val MAX_PHOTOS = 4
         private const val MAX_AVATAR_BYTES = 8 * 1024 * 1024
         private const val KEY_DRAFT = "draft"
+        private const val KEY_LAST_LINES = "last_lines"
+        private const val MAX_LAST_LINES = 300
         private const val KEY_MODEL = "model"
         private const val KEY_EFFORT = "effort"
         private const val KEY_FAVOURITES = "favourites"

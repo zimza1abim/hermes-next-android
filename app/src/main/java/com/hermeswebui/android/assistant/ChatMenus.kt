@@ -22,7 +22,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -47,7 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** The screens of the native app. Back goes from a menu's own screen to the menu, then to the chats. */
-internal enum class Pane { LIST, CHAT, MENU, FONT, CRON, CAPABILITIES, INSTALL }
+internal enum class Pane { LIST, CHAT, MENU, FONT, CRON, CAPABILITIES, INSTALL, ARCHIVE }
 
 /** Whether the app icon opens the native chats instead of the Webapp page. On by default. */
 object NativeHome {
@@ -70,6 +83,7 @@ internal class MenuView(
     val plugins: Listing<Installable>,
     val mcpCatalog: Listing<Installable>,
     val installing: Set<String>,
+    val archived: Listing<ChatRow>,
     val notice: String?,
     val nativeHome: Boolean,
     /** Whose capabilities are listed: the open tab's bot, or the general profile. */
@@ -82,6 +96,7 @@ internal class MenuActions(
     val onCronPaused: (CronJob, Boolean) -> Unit,
     val onCronRun: (CronJob) -> Unit,
     val onInstall: (Installable) -> Unit,
+    val onUnarchive: (ChatRow) -> Unit,
     val onRefresh: (Pane) -> Unit,
     val onAppSettings: () -> Unit,
     val onWebapp: () -> Unit,
@@ -95,14 +110,18 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
         Pane.MENU -> {
             PaneHeader("메뉴", onBack = { actions.onPane(Pane.LIST) })
             LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), modifier = Modifier.fillMaxSize()) {
-                item { MenuRow("크론 작업", "예약 작업을 보고, 멈추고, 바로 실행해요") { actions.onPane(Pane.CRON) } }
-                item { MenuRow("스킬 · 도구 · MCP", "${view.capabilitiesOf}에 켜져 있는 것들") { actions.onPane(Pane.CAPABILITIES) } }
-                item { MenuRow("플러그인 · MCP 설치", "Hermes 카탈로그에서 골라 설치해요") { actions.onPane(Pane.INSTALL) } }
-                item { MenuRow("글꼴", HermesFonts.pickedLabel(LocalContext.current) ?: "휴대폰 기본 글꼴") { actions.onPane(Pane.FONT) } }
-                item { MenuRow("알림 · 앱 설정", "알림 종류, 미리보기, 배터리, 서버 주소", onClick = actions.onAppSettings) }
-                item { MenuRow("Webapp 열기", "로그인과 나머지 기능은 Webapp 화면에서", onClick = actions.onWebapp) }
+                item { SectionTitle("Hermes", null, Modifier.padding(start = 12.dp, top = 6.dp, bottom = 4.dp)) }
+                item { MenuRow(Icons.Rounded.Schedule, "크론 작업", "예약 작업을 보고, 멈추고, 바로 실행해요") { actions.onPane(Pane.CRON) } }
+                item { MenuRow(Icons.Rounded.Extension, "스킬 · 도구 · MCP", "${view.capabilitiesOf}에 켜져 있는 것들") { actions.onPane(Pane.CAPABILITIES) } }
+                item { MenuRow(Icons.Rounded.Download, "플러그인 · MCP 설치", "Hermes 카탈로그에서 골라 설치해요") { actions.onPane(Pane.INSTALL) } }
+                item { MenuRow(Icons.Rounded.Archive, "보관한 대화", "보관한 대화를 보고 다시 꺼내요") { actions.onPane(Pane.ARCHIVE) } }
+                item { SectionTitle("앱", null, Modifier.padding(start = 12.dp, top = 16.dp, bottom = 4.dp)) }
+                item { MenuRow(Icons.Rounded.TextFields, "글꼴", HermesFonts.pickedLabel(LocalContext.current) ?: "휴대폰 기본 글꼴") { actions.onPane(Pane.FONT) } }
+                item { MenuRow(Icons.Rounded.Notifications, "알림 · 앱 설정", "알림 종류, 미리보기, 배터리, 서버 주소", onClick = actions.onAppSettings) }
+                item { MenuRow(Icons.Rounded.Language, "Webapp 열기", "로그인과 나머지 기능은 Webapp 화면에서", onClick = actions.onWebapp) }
                 item {
                     MenuRow(
+                        Icons.Rounded.Home,
                         "앱을 열면 이 화면으로 시작",
                         if (view.nativeHome) "켜짐: 앱 아이콘이 네이티브 대화를 열어요" else "꺼짐: 앱 아이콘이 Webapp을 열어요",
                         trailing = { Toggle(view.nativeHome) },
@@ -128,8 +147,8 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
             Notice(view.notice, actions.onNoticeShown)
             when {
                 view.cron.loading && view.cron.rows.isEmpty() -> Loading()
-                view.cron.failed && view.cron.rows.isEmpty() -> Note("작업 목록을 읽지 못했어요.")
-                view.cron.rows.isEmpty() -> Note("예약된 작업이 없어요.")
+                view.cron.failed && view.cron.rows.isEmpty() -> EmptyState("작업 목록을 읽지 못했어요")
+                view.cron.rows.isEmpty() -> EmptyState("예약된 작업이 없어요")
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()) {
                     items(view.cron.rows, key = { "${it.profile}/${it.id}" }) { job -> CronRow(job, actions) }
@@ -140,23 +159,34 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
             PaneHeader("스킬 · 도구 · MCP", onBack = { actions.onPane(Pane.MENU) }) {
                 RoundIcon(Icons.Rounded.Refresh, "새로 고침") { actions.onRefresh(Pane.CAPABILITIES) }
             }
+            var query by rememberSaveable { mutableStateOf("") }
+            SearchField(query, { query = it }, "이름이나 설명으로 찾기", Modifier.padding(horizontal = 16.dp).padding(top = 8.dp))
+            val needle = query.trim()
+            fun Listing<Capability>.matching() = if (needle.isEmpty()) this else
+                copy(rows = rows.filter { it.name.contains(needle, true) || it.detail.orEmpty().contains(needle, true) })
             LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), modifier = Modifier.fillMaxSize()) {
-                section("도구 모음", view.toolsets)
-                section("MCP 서버", view.mcp)
-                section("스킬", view.skills)
+                section("도구 모음", view.toolsets.matching(), needle.isNotEmpty())
+                section("MCP 서버", view.mcp.matching(), needle.isNotEmpty())
+                section("스킬", view.skills.matching(), needle.isNotEmpty())
             }
         }
         Pane.INSTALL -> {
             PaneHeader("플러그인 · MCP 설치", onBack = { actions.onPane(Pane.MENU) }) {
                 RoundIcon(Icons.Rounded.Refresh, "새로 고침") { actions.onRefresh(Pane.INSTALL) }
             }
+            var query by rememberSaveable { mutableStateOf("") }
+            SearchField(query, { query = it }, "플러그인, MCP 서버 찾기", Modifier.padding(horizontal = 16.dp).padding(top = 8.dp))
             Notice(view.notice, actions.onNoticeShown)
+            val needle = query.trim()
+            fun Listing<Installable>.matching() = if (needle.isEmpty()) this else copy(rows = rows.filter {
+                it.title.contains(needle, true) || it.name.contains(needle, true) || it.detail.orEmpty().contains(needle, true) || it.source.orEmpty().contains(needle, true)
+            })
             // A plugin is code that will run on the Hermes machine, so installing one is confirmed first.
             var asking by remember { mutableStateOf<Installable?>(null) }
             LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()) {
-                catalog("플러그인", view.plugins, view.installing) { asking = it }
-                catalog("MCP 서버", view.mcpCatalog, view.installing) { asking = it }
+                catalog("플러그인", view.plugins.matching(), view.installing, needle.isNotEmpty()) { asking = it }
+                catalog("MCP 서버", view.mcpCatalog.matching(), view.installing, needle.isNotEmpty()) { asking = it }
             }
             asking?.let { item ->
                 ConfirmDialog(
@@ -171,23 +201,42 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
                 }
             }
         }
+        Pane.ARCHIVE -> {
+            PaneHeader("보관한 대화", onBack = { actions.onPane(Pane.MENU) }) {
+                RoundIcon(Icons.Rounded.Refresh, "새로 고침") { actions.onRefresh(Pane.ARCHIVE) }
+            }
+            Notice(view.notice, actions.onNoticeShown)
+            when {
+                view.archived.loading && view.archived.rows.isEmpty() -> Loading()
+                view.archived.failed && view.archived.rows.isEmpty() -> EmptyState("보관한 대화를 읽지 못했어요")
+                view.archived.rows.isEmpty() -> EmptyState("보관한 대화가 없어요")
+                else -> LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), modifier = Modifier.fillMaxSize()) {
+                    items(view.archived.rows, key = { "${it.profile}/${it.id}" }) { row ->
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(row.title ?: "제목 없는 대화", style = RoseType.Body.copy(fontSize = 15.5.sp, fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(listOfNotNull(row.profile?.let { "@$it" }, row.lastActiveAt?.let(::ago)).joinToString(" · "), style = RoseType.Label, maxLines = 1)
+                            }
+                            PillButton("꺼내기", filled = false, modifier = Modifier.padding(start = 10.dp)) { actions.onUnarchive(row) }
+                        }
+                    }
+                }
+            }
+        }
         Pane.LIST, Pane.CHAT -> Unit
     }
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.catalog(
-    title: String, listing: Listing<Installable>, installing: Set<String>, onInstall: (Installable) -> Unit,
+    title: String, listing: Listing<Installable>, installing: Set<String>, searching: Boolean, onInstall: (Installable) -> Unit,
 ) {
     item(key = "catalog-$title") {
-        Row(Modifier.padding(top = 8.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = RoseType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp))
-            if (listing.rows.isNotEmpty()) Text("  ${listing.rows.count { it.installed }} / ${listing.rows.size} 설치됨", style = RoseType.Meta)
-        }
+        SectionTitle(title, "${listing.rows.count { it.installed }} / ${listing.rows.size} 설치됨".takeIf { listing.rows.isNotEmpty() }, Modifier.padding(top = 8.dp, start = 4.dp))
     }
     when {
         listing.loading && listing.rows.isEmpty() -> item(key = "catalog-load-$title") { Text("읽는 중…", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
         listing.failed && listing.rows.isEmpty() -> item(key = "catalog-fail-$title") { Text("카탈로그를 읽지 못했어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
-        listing.rows.isEmpty() -> item(key = "catalog-none-$title") { Text("카탈로그가 비어 있어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
+        listing.rows.isEmpty() -> item(key = "catalog-none-$title") { Text(if (searching) "찾는 것이 없어요" else "카탈로그가 비어 있어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
         else -> items(listing.rows.size, key = { "catalog-$title-${listing.rows[it].name}" }) { index ->
             val item = listing.rows[index]
             Column(
@@ -228,18 +277,14 @@ internal fun ConfirmDialog(title: String, body: String, confirm: String, onDismi
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.section(title: String, listing: Listing<Capability>) {
+private fun androidx.compose.foundation.lazy.LazyListScope.section(title: String, listing: Listing<Capability>, searching: Boolean) {
     item(key = "head-$title") {
-        Row(Modifier.padding(top = 14.dp, bottom = 6.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = RoseType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp))
-            val on = listing.rows.count { it.enabled }
-            if (listing.rows.isNotEmpty()) Text("  $on / ${listing.rows.size}", style = RoseType.Meta)
-        }
+        SectionTitle(title, "${listing.rows.count { it.enabled }} / ${listing.rows.size} 켜짐".takeIf { listing.rows.isNotEmpty() }, Modifier.padding(top = 14.dp, bottom = 6.dp, start = 4.dp))
     }
     when {
         listing.loading && listing.rows.isEmpty() -> item(key = "load-$title") { Text("읽는 중…", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
         listing.failed && listing.rows.isEmpty() -> item(key = "fail-$title") { Text("읽지 못했어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
-        listing.rows.isEmpty() -> item(key = "none-$title") { Text("없어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
+        listing.rows.isEmpty() -> item(key = "none-$title") { Text(if (searching) "찾는 것이 없어요" else "없어요", style = RoseType.Label, modifier = Modifier.padding(4.dp)) }
         else -> items(listing.rows.size, key = { "$title-$it" }) { index -> CapabilityRow(listing.rows[index]) }
     }
 }
@@ -316,18 +361,60 @@ internal fun PaneHeader(title: String, onBack: () -> Unit, trailing: @Composable
 }
 
 @Composable
-private fun MenuRow(title: String, detail: String, trailing: @Composable () -> Unit = {
+private fun MenuRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String, trailing: @Composable () -> Unit = {
     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = Rose.Muted, modifier = Modifier.size(20.dp))
 }, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        Box(Modifier.size(40.dp).clip(CircleShape).background(Rose.Soft), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Rose.Deep, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.padding(start = 14.dp).weight(1f)) {
             Text(title, style = RoseType.Body.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium), maxLines = 1)
             Text(detail, style = RoseType.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         trailing()
+    }
+}
+
+/** The search field every list of the native screens uses. */
+@Composable
+internal fun SearchField(query: String, onQuery: (String) -> Unit, hint: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 46.dp).clip(RoundedCornerShape(23.dp))
+            .background(Rose.Field).border(1.dp, Rose.Border, RoundedCornerShape(23.dp)).padding(start = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Search, null, tint = Rose.Muted, modifier = Modifier.size(18.dp))
+        Box(Modifier.padding(start = 8.dp).weight(1f)) {
+            if (query.isEmpty()) Text(hint, style = RoseType.Label.copy(fontSize = 14.5.sp), maxLines = 1)
+            BasicTextField(query, onQuery, singleLine = true, textStyle = RoseType.Body.copy(fontSize = 15.sp),
+                cursorBrush = SolidColor(Rose.Deep), modifier = Modifier.fillMaxWidth())
+        }
+        if (query.isNotEmpty()) Box(
+            Modifier.size(38.dp).clip(CircleShape).clickable(role = androidx.compose.ui.semantics.Role.Button) { onQuery("") },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Rounded.Close, "지우기", tint = Rose.Muted, modifier = Modifier.size(16.dp)) }
+    }
+}
+
+/** A section's name over its rows, with an optional count beside it. */
+@Composable
+internal fun SectionTitle(title: String, count: String?, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = RoseType.Label.copy(fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Rose.ChipText))
+        if (count != null) Text("  $count", style = RoseType.Meta)
+    }
+}
+
+/** An empty list: the flower and one line. */
+@Composable
+internal fun EmptyState(text: String) {
+    Column(Modifier.fillMaxSize().padding(top = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        PixelFlower(28.dp)
+        Text(text, style = RoseType.Label.copy(fontSize = 14.sp), modifier = Modifier.padding(top = 14.dp))
     }
 }
 
@@ -351,7 +438,7 @@ private fun Note(text: String) {
 
 /** A line that reports the last action and clears itself. */
 @Composable
-private fun Notice(text: String?, onShown: () -> Unit) {
+internal fun Notice(text: String?, onShown: () -> Unit) {
     if (text == null) return
     LaunchedEffect(text) {
         delay(2_500)

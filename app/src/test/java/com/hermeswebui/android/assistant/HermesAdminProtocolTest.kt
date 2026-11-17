@@ -30,4 +30,18 @@ class HermesAdminProtocolTest {
             .containsExactly(Capability("files", "npx files", true))
         assertThat(HermesAdminProtocol.mcpServers(JSONArray("[]"))).isNull()
     }
+
+    @Test
+    fun `a change to a chat carries the request id and the revision the snapshot gave`() {
+        val at = HermesAdminProtocol.revision(JSONObject("""{"session_id":"a b","exists":true,"runtime_revision":7,"runtime_generation":2}"""))!!
+        assertThat(at).isEqualTo(ChatRevision(true, 7, 2))
+        assertThat(HermesAdminProtocol.snapshotPath("a b", "nova")).isEqualTo("/api/sessions/a+b/mutation-snapshot?profile=nova")
+        assertThat(HermesAdminProtocol.deletePath("a b", "nova", "r1", at))
+            .isEqualTo("/api/sessions/a+b?request_id=r1&expected_revision=7&expected_generation=2&profile=nova")
+        assertThat(HermesAdminProtocol.deletePath("x", null, "r1", ChatRevision(true, 0, null))).isEqualTo("/api/sessions/x?request_id=r1&expected_revision=0")
+        val body = HermesAdminProtocol.changeBody(ChatChange(title = "새 이름", pinned = true), "nova", "r2", at)
+        assertThat(body.toString()).isEqualTo(JSONObject("""{"request_id":"r2","expected_revision":7,"expected_generation":2,"title":"새 이름","pinned":true,"profile":"nova"}""").toString())
+        assertThat(HermesAdminProtocol.changeBody(ChatChange(archived = false), null, "r3", ChatRevision(true, 1, null)).has("title")).isFalse()
+        assertThat(HermesAdminProtocol.revision(JSONObject("""{"exists":false}"""))).isEqualTo(ChatRevision(false, 0, null))
+    }
 }

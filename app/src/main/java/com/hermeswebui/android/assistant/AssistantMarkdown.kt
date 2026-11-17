@@ -255,9 +255,9 @@ internal object AssistantMarkdown {
         withLink(LinkAnnotation.Url(url, LINK)) { append(label) }
     }
 
-    private val BOLD = SpanStyle(fontWeight = FontWeight.Bold)
+    private val BOLD = SpanStyle(fontWeight = FontWeight.Bold, color = Rose.Strong)
     private val QUOTED = SpanStyle(color = Rose.Muted)
-    private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = Rose.ChipText, background = Rose.Soft)
+    private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 14.5.sp, color = Rose.ChipText, background = Rose.Soft)
     private val CODE_BLOCK = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, background = Rose.Soft)
     private val LINK = TextLinkStyles(SpanStyle(color = Rose.Deep, textDecoration = TextDecoration.Underline))
 }

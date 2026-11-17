@@ -37,6 +37,12 @@ data class Installable(
     val blocked: String? = null,
 )
 
+/** What a chat's menu changes; a null field is left as it is. */
+data class ChatChange(val title: String? = null, val pinned: Boolean? = null, val archived: Boolean? = null, val unread: Boolean? = null)
+
+/** The counters the server checks a change against, from a chat's mutation snapshot. */
+data class ChatRevision(val exists: Boolean, val revision: Int, val generation: Int?)
+
 data class Listing<T>(val rows: List<T> = emptyList(), val loading: Boolean = false, val failed: Boolean = false)
 
 /** The Hermes server's own lists the menu shows, read over its HTTP API. Pure parsing; no Android. */
@@ -119,6 +125,37 @@ object HermesAdminProtocol {
         }
     }
 
+    /*
+     * The server commits a change to a chat only with a request id and the revision the client last saw
+     * (a change without them is refused with 409), so each one first reads the chat's snapshot.
+     */
+    fun snapshotPath(id: String, profile: String?): String = "/api/sessions/${enc(id)}/mutation-snapshot" + scope(profile, '?')
+
+    fun revision(reply: Any?): ChatRevision? {
+        val row = reply as? JSONObject ?: return null
+        return ChatRevision(row.opt("exists") == true, (row.opt("runtime_revision") as? Number)?.toInt() ?: 0, (row.opt("runtime_generation") as? Number)?.toInt())
+    }
+
+    fun deletePath(id: String, profile: String?, requestId: String, at: ChatRevision): String =
+        "/api/sessions/${enc(id)}?request_id=${enc(requestId)}&expected_revision=${at.revision}" +
+            (at.generation?.let { "&expected_generation=$it" } ?: "") + scope(profile, '&')
+
+    fun changePath(id: String): String = "/api/sessions/${enc(id)}"
+
+    fun changeBody(change: ChatChange, profile: String?, requestId: String, at: ChatRevision): JSONObject =
+        JSONObject().put("request_id", requestId).put("expected_revision", at.revision).apply {
+            at.generation?.let { put("expected_generation", it) }
+            change.title?.let { put("title", it) }
+            change.pinned?.let { put("pinned", it) }
+            change.archived?.let { put("archived", it) }
+            change.unread?.let { put("unread", it) }
+            profile?.let { put("profile", it) }
+        }
+
+    private fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+
+    private fun scope(profile: String?, lead: Char) = profile?.let { "${lead}profile=" + enc(it) }.orEmpty()
+
     private fun text(obj: JSONObject, name: String): String? = (obj.opt(name) as? String)?.takeIf { it.isNotBlank() }
 }
 
@@ -167,10 +204,34 @@ class HermesAdmin(context: Context) {
     }
 
     /** Deletes a chat on the server for good; [done] gets whether it is gone. */
-    fun deleteChat(row: ChatRow, done: (Boolean) -> Unit) {
-        val path = "/api/sessions/${java.net.URLEncoder.encode(row.id, "UTF-8")}" + scope(row.profile)
-        call("DELETE", path) { reply -> done(reply != null) } ?: done(false)
+    fun deleteChat(row: ChatRow, done: (Boolean) -> Unit) = at(row, done, absent = true) { revision ->
+        call("DELETE", HermesAdminProtocol.deletePath(row.id, row.profile, newRequestId(), revision)) { reply -> done(reply != null) } ?: done(false)
     }
+
+    /** Renames, pins or archives a chat; [done] gets whether the server took it. */
+    fun changeChat(row: ChatRow, change: ChatChange, done: (Boolean) -> Unit) = at(row, done, absent = false) { revision ->
+        call("PATCH", HermesAdminProtocol.changePath(row.id), HermesAdminProtocol.changeBody(change, row.profile, newRequestId(), revision)) { reply ->
+            done((reply as? JSONObject)?.opt("ok") != false && reply != null)
+        } ?: done(false)
+    }
+
+    /** Reads [row]'s revision, then runs [then] with it. A chat that is already gone answers [absent]. */
+    private fun at(row: ChatRow, done: (Boolean) -> Unit, absent: Boolean, then: (ChatRevision) -> Unit) {
+        call("GET", HermesAdminProtocol.snapshotPath(row.id, row.profile)) { reply ->
+            val revision = HermesAdminProtocol.revision(reply)
+            when {
+                revision == null -> done(false)
+                !revision.exists -> done(absent)
+                else -> then(revision)
+            }
+        } ?: done(false)
+    }
+
+    private fun newRequestId() = java.util.UUID.randomUUID().toString()
+
+    val archived = MutableStateFlow(Listing<ChatRow>())
+
+    fun refreshArchived() = read(archived, AssistantProtocol.ARCHIVED_PATH, AssistantProtocol::archived)
 
     private fun scope(profile: String?) = profile?.let { "?profile=" + java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
 

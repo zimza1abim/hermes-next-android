@@ -6,7 +6,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
 import java.util.Properties
 
-val appVersionName = "1.3.5"
+val appVersionName = "1.0.0"
 val appVersionCode = run {
     val semver = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)$")
         .matchEntire(appVersionName)
@@ -14,7 +14,7 @@ val appVersionCode = run {
     val (major, minor, patch) = semver.destructured
     major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()
 }
-val distributionArtifactName = "hermes-webui-v$appVersionName"
+val distributionArtifactName = "hermes-next-v$appVersionName"
 val githubReleaseArtifactName = "$distributionArtifactName-github"
 
 // Repository (owner/name) whose GitHub Releases the "github" build type checks.
@@ -115,7 +115,8 @@ extensions.configure<ApplicationExtension>("android") {
     }
 
     defaultConfig {
-        applicationId = "com.hermeswebui.android"
+        // The code keeps its `com.hermeswebui.android` namespace, so upstream changes still merge.
+        applicationId = "dev.hermes.next"
         minSdk = 26
         targetSdk = 37
         versionCode = appVersionCode
@@ -134,7 +135,6 @@ extensions.configure<ApplicationExtension>("android") {
         // `release` is the FOSS store build: no Google Play libraries (see `src/foss`) and
         // no in-app updater because F-Droid delivers updates itself.
         release {
-            applicationIdSuffix = ".fdroid"
             buildConfigField("String", "UPDATE_CHANNEL", "\"none\"")
             buildConfigField("String", "GITHUB_RELEASES_API_URL", "\"\"")
             isMinifyEnabled = true

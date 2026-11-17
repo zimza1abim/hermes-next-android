@@ -25,16 +25,35 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -87,6 +106,11 @@ internal class ChatsActions(
     val onNew: () -> Unit,
     val onTab: (String?) -> Unit,
     val onDelete: (ChatRow) -> Unit,
+    val onRename: (ChatRow, String) -> Unit,
+    val onPin: (ChatRow, Boolean) -> Unit,
+    val onArchive: (ChatRow) -> Unit,
+    val onPoll: () -> Unit,
+    val onNoticeShown: () -> Unit,
     val onBackToList: () -> Unit,
     val onRefresh: () -> Unit,
     val onMenu: () -> Unit,
@@ -154,9 +178,12 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
                 Text(label, style = RoseType.Meta, maxLines = 1, modifier = Modifier.padding(start = 6.dp))
             }
         }
-        RoundIcon(Icons.Rounded.Refresh, "목록 새로 고침", onClick = chats.onRefresh)
-        RoundIcon(Icons.Rounded.Menu, "메뉴", onClick = chats.onMenu)
-        RoundIcon(Icons.Rounded.EditNote, "새 대화", filled = true, onClick = chats.onNew)
+        // The main action first, then the two that are used less; the menu sits at the edge, where menus are.
+        RoundIcon(Icons.Rounded.Add, "새 대화", primary = true, onClick = chats.onNew)
+        Spacer(Modifier.width(6.dp))
+        RoundIcon(Icons.Rounded.Refresh, "목록 새로 고침", filled = true, onClick = chats.onRefresh)
+        Spacer(Modifier.width(4.dp))
+        RoundIcon(Icons.Rounded.Menu, "메뉴", filled = true, onClick = chats.onMenu)
     }
     // General chats and each bot's chats are separate lists. Bots come from the server's roster, or,
     // until it is read, from the profiles the chats themselves name.
@@ -167,34 +194,70 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
             view.chats.filterNot(::general).mapNotNull { it.profile }.distinct().map { ProfileRow(it, it) }
         }
     }
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        AllChip(selected = view.tab == ChatsView.ALL) { chats.onTab(ChatsView.ALL) }
-        // Then the main bot: the server's own profile, by the name its answers carry.
-        val main = state.profiles.firstOrNull { it.own }?.title
-        TabChip(main?.let { "@$it" } ?: "일반", view.avatars[view.avatarKey(own ?: "default")], selected = view.tab == null) { chats.onTab(null) }
-        bots.forEach { bot -> TabChip("@${bot.title}", view.avatars[view.avatarKey(bot.name)], selected = view.tab == bot.name) { chats.onTab(bot.name) } }
+    // One page per tab, in the order of the chips: every chat, the main bot, then each bot. A swipe
+    // sideways moves to the next one.
+    val tabs = remember(bots) { listOf<String?>(ChatsView.ALL, null) + bots.map { it.name } }
+    val pager = rememberPagerState(initialPage = tabs.indexOf(view.tab).coerceAtLeast(0)) { tabs.size }
+    val scope = rememberCoroutineScope()
+    val chips = rememberLazyListState()
+    // A bot's tab can be asked for before the roster names the bot; it is shown once it does.
+    LaunchedEffect(tabs) {
+        val wanted = tabs.indexOf(view.tab)
+        if (wanted >= 0 && wanted != pager.currentPage) pager.scrollToPage(wanted)
     }
-    Row(
-        Modifier.padding(horizontal = 20.dp).padding(top = 12.dp).fillMaxWidth().heightIn(min = 46.dp).clip(RoundedCornerShape(23.dp))
-            .background(Rose.Field).border(1.dp, Rose.Border, RoundedCornerShape(23.dp)).padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.Search, null, tint = Rose.Muted, modifier = Modifier.size(18.dp))
-        Box(Modifier.padding(start = 8.dp).weight(1f)) {
-            if (query.isEmpty()) Text("대화 찾기", style = RoseType.Label)
-            BasicTextField(query, { query = it }, singleLine = true, textStyle = RoseType.Body.copy(fontSize = 15.sp),
-                cursorBrush = SolidColor(Rose.Rose), modifier = Modifier.fillMaxWidth())
+    LaunchedEffect(pager, tabs) {
+        snapshotFlow { pager.currentPage }.drop(1).collect { page -> if (page in tabs.indices) chats.onTab(tabs[page]) }
+    }
+    LaunchedEffect(pager.currentPage) { chips.animateScrollToItem((pager.currentPage - 1).coerceAtLeast(0)) }
+    // A running chat's row is read again while the list is on screen, so it stops blinking when it ends.
+    val anyRunning = view.chats.any { it.running }
+    LaunchedEffect(anyRunning) {
+        while (anyRunning) {
+            delay(6_000)
+            chats.onPoll()
         }
     }
-    Box(Modifier.padding(horizontal = 20.dp).padding(top = 10.dp)) { Banner(state.link, actions) }
-    view.notice?.let {
-        Text(it, fontSize = 13.5.sp, color = Rose.ChipText, modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 6.dp).fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp)).background(Rose.Soft).padding(horizontal = 14.dp, vertical = 9.dp))
+    val main = state.profiles.firstOrNull { it.own }?.title
+    LazyRow(
+        state = chips,
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+    ) {
+        items(tabs.size, key = { tabs[it] ?: "" }) { index ->
+            val selected = pager.currentPage == index
+            val go = { scope.launch { pager.animateScrollToPage(index) }; Unit }
+            when (val tab = tabs[index]) {
+                ChatsView.ALL -> TabChip("전체", null, selected, picture = false, onClick = go)
+                // The main bot: the server's own profile, by the name its answers carry.
+                null -> TabChip(main?.let { "@$it" } ?: "일반", view.avatars[view.avatarKey(own ?: "default")], selected, onClick = go)
+                else -> TabChip("@${bots.firstOrNull { it.name == tab }?.title ?: tab}", view.avatars[view.avatarKey(tab)], selected, onClick = go)
+            }
+        }
     }
+    SearchField(query, { query = it }, "대화 찾기", Modifier.padding(horizontal = 20.dp).padding(top = 12.dp))
+    Box(Modifier.padding(horizontal = 20.dp).padding(top = 10.dp)) { Banner(state.link, actions) }
+    Notice(view.notice, chats.onNoticeShown)
+
+    var acting by remember { mutableStateOf<ChatRow?>(null) }
+    var renaming by remember { mutableStateOf<ChatRow?>(null) }
     var deleting by remember { mutableStateOf<ChatRow?>(null) }
+    acting?.let { row ->
+        ChatSheet(
+            row,
+            onDismiss = { acting = null },
+            onRename = { acting = null; renaming = row },
+            onPin = { acting = null; chats.onPin(row, !row.pinned) },
+            onArchive = { acting = null; chats.onArchive(row) },
+            onDelete = { acting = null; deleting = row },
+        )
+    }
+    renaming?.let { row ->
+        RenameDialog(row.title.orEmpty(), onDismiss = { renaming = null }) { title ->
+            renaming = null
+            chats.onRename(row, title)
+        }
+    }
     deleting?.let { row ->
         ConfirmDialog(
             title = "이 대화를 지울까요?",
@@ -207,21 +270,30 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
         }
     }
     val needle = query.trim()
-    val rows = remember(view.chats, view.tab, own, needle, state.profiles) {
+    HorizontalPager(pager, modifier = Modifier.weight(1f).fillMaxWidth(), key = { tabs.getOrNull(it) ?: "" }) { page ->
+        ChatList(tabs.getOrNull(page), state.profiles, view, own, needle, onAct = { acting = it }, onOpen = chats.onOpen)
+    }
+}
+
+/** One tab's chats. [tab] is [ChatsView.ALL], null for the main bot, or a bot's profile name. */
+@Composable
+private fun ChatList(tab: String?, profiles: List<ProfileRow>, view: ChatsView, own: String?, needle: String, onAct: (ChatRow) -> Unit, onOpen: (ChatRow) -> Unit) {
+    val rows = remember(view.chats, tab, own, needle, profiles) {
+        fun general(row: ChatRow) = if (own != null) row.profile == null || row.profile == own else row.defaultProfile
         // A bot's standing chat is not among the recent chats: it heads its bot's tab and joins the full list.
-        val standing = when (view.tab) {
-            ChatsView.ALL -> state.profiles.mapNotNull { it.chat }
-            else -> listOfNotNull(state.profiles.firstOrNull { if (view.tab == null) it.own else it.name == view.tab }?.chat)
+        val standing = when (tab) {
+            ChatsView.ALL -> profiles.mapNotNull { it.chat }
+            else -> listOfNotNull(profiles.firstOrNull { if (tab == null) it.own else it.name == tab }?.chat)
         }
         (standing + view.chats
-            .filter { view.tab == ChatsView.ALL || (if (view.tab == null) general(it) else it.profile == view.tab) }
+            .filter { tab == ChatsView.ALL || (if (tab == null) general(it) else it.profile == tab) }
             .filter { row -> standing.none { it.id == row.id && it.profile == row.profile } })
             .filter { needle.isEmpty() || it.title.orEmpty().contains(needle, true) || it.preview.orEmpty().contains(needle, true) }
     }
     // Bot chat, app chats, each messaging platform and cron runs are separate sections, in that order.
-    val sections = remember(rows, view.tab) {
+    val sections = remember(rows, tab) {
         // The full list is one run of every kind of chat, the newest at the top.
-        if (view.tab == ChatsView.ALL) return@remember listOf("전체" to rows.sortedByDescending { it.lastActiveAt ?: 0.0 })
+        if (tab == ChatsView.ALL) return@remember listOf("전체" to rows.sortedByDescending { it.lastActiveAt ?: 0.0 })
         val messaging = rows.filter { it.kind == ChatKind.MESSAGING }.groupBy { it.source ?: "messaging" }
         listOf("봇 채팅" to rows.filter { it.kind == ChatKind.BOT }, "대화" to rows.filter { it.kind == ChatKind.CHAT }.sortedByDescending { it.pinned }) +
             messaging.map { (source, threads) -> platformLabel(source) to threads } +
@@ -229,25 +301,73 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
     }.filter { it.second.isNotEmpty() }
     when {
         rows.isEmpty() && view.loading -> Box(Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) { ThinkingIndicator() }
-        rows.isEmpty() -> Box(Modifier.fillMaxSize().padding(top = 48.dp), contentAlignment = Alignment.TopCenter) {
-            Text(if (needle.isEmpty()) "아직 대화가 없어요" else "찾는 대화가 없어요", style = RoseType.Label)
-        }
+        rows.isEmpty() -> EmptyState(if (needle.isEmpty()) "아직 대화가 없어요" else "찾는 대화가 없어요")
         else -> LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 24.dp), modifier = Modifier.fillMaxSize()) {
             sections.forEach { (title, chatRows) ->
-                item(key = "section-$title") {
-                    Row(Modifier.padding(start = 10.dp, top = 14.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(title, style = RoseType.Meta.copy(fontSize = 12.sp, color = Rose.ChipText))
-                        Text("  ${chatRows.size}", style = RoseType.Meta)
-                    }
-                }
+                item(key = "section-$title") { SectionTitle(title, "${chatRows.size}", Modifier.padding(start = 10.dp, top = 14.dp, bottom = 2.dp)) }
                 items(chatRows, key = { "${it.kind}/${it.profile}/${it.id}" }) { row ->
                     ChatRowItem(
                         row, view.avatars[view.avatarKey(row.profile ?: own ?: "default")],
-                        tag = kindTag(row).takeIf { view.tab == ChatsView.ALL },
-                        // A bot's standing chat is the bot itself; it is not removed from here.
-                        onLongClick = { deleting = row }.takeIf { row.kind != ChatKind.BOT },
-                    ) { chats.onOpen(row) }
+                        tag = kindTag(row).takeIf { tab == ChatsView.ALL },
+                        // A bot's standing chat is the bot itself; it is not renamed or removed from here.
+                        onLongClick = { onAct(row) }.takeIf { row.kind != ChatKind.BOT },
+                    ) { onOpen(row) }
                 }
+            }
+        }
+    }
+}
+
+/** What a long press on a chat offers. */
+@Composable
+private fun ChatSheet(row: ChatRow, onDismiss: () -> Unit, onRename: () -> Unit, onPin: () -> Unit, onArchive: () -> Unit, onDelete: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Rose.Panel).border(1.dp, Rose.Border, RoundedCornerShape(26.dp)).padding(vertical = 10.dp)) {
+            Text(row.title ?: "제목 없는 대화", style = RoseType.Body.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 22.dp).padding(top = 10.dp, bottom = 8.dp))
+            SheetRow(Icons.Rounded.Edit, "이름 변경", onClick = onRename)
+            SheetRow(Icons.Rounded.PushPin, if (row.pinned) "고정 해제" else "맨 위에 고정", onClick = onPin)
+            SheetRow(Icons.Rounded.Archive, "보관", "목록에서 숨겨요. 메뉴의 보관한 대화에서 꺼낼 수 있어요", onClick = onArchive)
+            SheetRow(Icons.Rounded.DeleteOutline, "삭제", strong = true, onClick = onDelete)
+        }
+    }
+}
+
+@Composable
+private fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, detail: String? = null, strong: Boolean = false, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 22.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = if (strong) Rose.Deep else Rose.Muted, modifier = Modifier.size(20.dp))
+        Column(Modifier.padding(start = 14.dp)) {
+            Text(label, style = RoseType.Body.copy(fontSize = 15.5.sp, color = if (strong) Rose.Deep else Rose.Text, fontWeight = if (strong) FontWeight.SemiBold else FontWeight.Normal))
+            if (detail != null) Text(detail, style = RoseType.Label.copy(fontSize = 12.sp))
+        }
+    }
+}
+
+@Composable
+private fun RenameDialog(current: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var title by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(current, androidx.compose.ui.text.TextRange(0, current.length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val ready = title.text.isNotBlank() && title.text.trim() != current
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Rose.Panel).border(1.dp, Rose.Border, RoundedCornerShape(26.dp)).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("이름 변경", style = RoseType.Body.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold))
+            BasicTextField(
+                title, { title = it.copy(text = it.text.take(120)) }, singleLine = true, textStyle = RoseType.Body.copy(fontSize = 15.5.sp),
+                cursorBrush = SolidColor(Rose.Deep),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).clip(RoundedCornerShape(16.dp)).background(Rose.Field)
+                    .border(1.dp, Rose.Rose, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("취소", filled = false, modifier = Modifier.weight(1f), onClick = onDismiss)
+                PillButton("바꾸기", filled = true, modifier = Modifier.weight(1f).alpha(if (ready) 1f else 0.45f)) { if (ready) onRename(title.text.trim()) }
             }
         }
     }
@@ -259,18 +379,6 @@ private fun kindTag(row: ChatRow): String? = when (row.kind) {
     ChatKind.MESSAGING -> platformLabel(row.source ?: "messaging")
     ChatKind.CRON -> "크론"
     ChatKind.CHAT -> null
-}
-
-@Composable
-private fun AllChip(selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(22.dp)).background(if (selected) Rose.Bubble else Rose.Field)
-            .border(1.dp, if (selected) Rose.Rose else Rose.Border, RoundedCornerShape(22.dp))
-            .clickable(role = Role.Tab, onClick = onClick).padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("전체", fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, color = if (selected) Rose.ChipText else Rose.Text, maxLines = 1)
-    }
 }
 
 /** A messaging source as its section title. */
@@ -285,35 +393,41 @@ private fun platformLabel(source: String): String = when (source) {
 }
 
 @Composable
-private fun TabChip(label: String, image: ImageBitmap?, selected: Boolean, onClick: () -> Unit) {
+private fun TabChip(label: String, image: ImageBitmap?, selected: Boolean, picture: Boolean = true, onClick: () -> Unit) {
     Row(
-        Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(22.dp)).background(if (selected) Rose.Bubble else Rose.Field)
-            .border(1.dp, if (selected) Rose.Rose else Rose.Border, RoundedCornerShape(22.dp))
-            .clickable(role = Role.Tab, onClick = onClick).padding(start = 5.dp, end = 14.dp),
+        Modifier.heightIn(min = 50.dp).clip(RoundedCornerShape(25.dp)).background(if (selected) Rose.Bubble else Rose.Field)
+            .border(1.dp, if (selected) Rose.Rose else Rose.Border, RoundedCornerShape(25.dp))
+            .clickable(role = Role.Tab, onClick = onClick).padding(start = if (picture) 5.dp else 16.dp, end = if (picture) 14.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BotAvatar(image, 34.dp)
+        if (picture) BotAvatar(image, 40.dp)
         Text(label, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) Rose.ChipText else Rose.Text, maxLines = 1, modifier = Modifier.padding(start = 7.dp))
+            color = if (selected) Rose.ChipText else Rose.Text, maxLines = 1, modifier = Modifier.padding(start = if (picture) 7.dp else 0.dp))
     }
 }
 
 @Composable
 private fun ChatRowItem(row: ChatRow, image: ImageBitmap?, tag: String?, onLongClick: (() -> Unit)?, onClick: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick?.let { act -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); act() } })
             .padding(horizontal = 10.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The owning bot's picture; the Hermes icon when it has none.
-        BotAvatar(image, 40.dp)
+        BotAvatar(image, 46.dp)
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(row.title ?: "제목 없는 대화", style = RoseType.Body.copy(fontSize = 15.5.sp, fontWeight = FontWeight.Medium),
+                if (row.pinned && row.kind != ChatKind.BOT) Icon(Icons.Rounded.PushPin, "고정됨", tint = Rose.Rose, modifier = Modifier.padding(end = 5.dp).size(14.dp))
+                Text(row.title ?: "제목 없는 대화", style = RoseType.Body.copy(fontSize = 15.5.sp, fontWeight = if (row.unread) FontWeight.Bold else FontWeight.Medium),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (tag != null) Text(tag, style = RoseType.Meta.copy(color = Rose.ChipText), maxLines = 1,
                     modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(8.dp)).background(Rose.Soft).padding(horizontal = 6.dp, vertical = 2.dp))
-                if (row.running) Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) { StatusDot(Rose.Deep, blinking = true) }
+                // The dot blinks while an answer is being written, and until an answer that came is read.
+                if (row.running || row.unread) Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StatusDot(if (row.running) Rose.Deep else Rose.Rose, blinking = true)
+                }
             }
             row.preview?.let { Text(it, style = RoseType.Label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp)) }
         }
@@ -339,7 +453,7 @@ private fun ColumnScope.ChatPane(
     val fresh = state.storedId == null && state.turns.isEmpty()
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 14.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         RoundIcon(Icons.AutoMirrored.Rounded.ArrowBack, "대화 목록", onClick = onBack)
-        if (bot != null) BotAvatar(bot.image, 36.dp, Modifier.padding(start = 2.dp))
+        if (bot != null) BotAvatar(bot.image, 42.dp, Modifier.padding(start = 2.dp))
         Column(Modifier.padding(start = if (bot != null) 9.dp else 4.dp).weight(1f)) {
             Text(state.title ?: if (fresh) "새 대화" else "대화", style = RoseType.Body.copy(fontSize = 16.5.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -351,7 +465,7 @@ private fun ColumnScope.ChatPane(
             }
         }
         if (fresh) ModelChip(models, actions)
-        else if (!state.busy) RoundIcon(Icons.Rounded.EditNote, "새 대화", onClick = onNew)
+        else RoundIcon(Icons.Rounded.Add, "새 대화", filled = true, onClick = onNew)
     }
     Box(Modifier.weight(1f).padding(horizontal = 20.dp)) {
         when {

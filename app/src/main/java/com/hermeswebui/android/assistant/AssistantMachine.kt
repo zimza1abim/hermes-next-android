@@ -41,6 +41,8 @@ data class ChatRow(
     val kind: ChatKind = ChatKind.CHAT,
     /** A messaging thread's platform (`telegram`, `discord`, ...). */
     val source: String? = null,
+    /** Something was written in it after it was last read, on any device. */
+    val unread: Boolean = false,
 )
 
 /** What a list row is: the bot's standing chat, a chat started in an app, a messaging thread, or a cron job's run. */
@@ -170,6 +172,12 @@ data class AssistantState(
     val wanted: Boolean get() = shown || profilesDue || opening || turns.any { it.status.active || it.status == TurnStatus.QUEUED }
 
     val busy: Boolean get() = turns.any { it.status.active || it.status == TurnStatus.QUEUED }
+
+    /**
+     * Whether another chat can be opened now. A question the server has (it is being answered) goes on
+     * without this screen; one that is not sent yet, or may not have arrived, would be lost.
+     */
+    val leavable: Boolean get() = turns.none { it.status == TurnStatus.QUEUED || it.status == TurnStatus.UNKNOWN }
 }
 
 sealed interface AssistantInput {
@@ -188,10 +196,11 @@ sealed interface AssistantInput {
     /** Starts a new chat; ignored while a turn runs. */
     data object NewChat : AssistantInput
     /** Opens an earlier chat of [profile] (null: the server's own) with its transcript; ignored while a turn runs. */
-    data class OpenChat(val storedId: String, val title: String?, val profile: String? = null) : AssistantInput
+    /** [leave] opens it even while an answer is being written in the chat on screen; that answer goes on at the server. */
+    data class OpenChat(val storedId: String, val title: String?, val profile: String? = null, val leave: Boolean = false) : AssistantInput
     data object RefreshProfiles : AssistantInput
     /** Starts a new chat with [name] (null: the server's own profile); ignored while a turn runs. */
-    data class SelectProfile(val name: String?) : AssistantInput
+    data class SelectProfile(val name: String?, val leave: Boolean = false) : AssistantInput
     data class Approve(val rpcId: RpcId, val allow: Boolean) : AssistantInput
     /** The user asks to reconnect now. */
     data object Retry : AssistantInput
@@ -265,12 +274,12 @@ object AssistantMachine {
             else state.copy(runtimeId = null, storedId = null, turns = emptyList(), requests = emptyList(),
                 history = emptyList(), opening = false, title = null, openedId = null) to emptyList()
         AssistantInput.RefreshProfiles -> state.copy(profilesDue = true) to emptyList()
-        is AssistantInput.SelectProfile -> if (state.busy) state to emptyList()
+        is AssistantInput.SelectProfile -> if (state.busy && !(input.leave && state.leavable)) state to emptyList()
             else state.copy(profile = input.name?.takeIf { it.isNotBlank() }, runtimeId = null, storedId = null, turns = emptyList(),
                 requests = emptyList(), history = emptyList(), opening = false, title = null, openedId = null,
                 calls = state.calls.filterValues { it != PendingCall.Resume && it != PendingCall.Create }) to emptyList()
         is AssistantInput.OpenChat -> when {
-            state.busy || input.storedId.isBlank() -> state to emptyList()
+            (state.busy && !(input.leave && state.leavable)) || input.storedId.isBlank() -> state to emptyList()
             // The chat already on screen: its transcript and this screen's turns stay as they are.
             input.storedId == state.openedId && (state.runtimeId != null || state.opening) -> state to emptyList()
             else -> state.copy(runtimeId = null, storedId = input.storedId, openedId = input.storedId, turns = emptyList(), requests = emptyList(),

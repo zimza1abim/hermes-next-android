@@ -121,7 +121,7 @@ class AssistantProtocolTest {
             "cron":{"sessions":[{"id":"c","title":"daily","source":"cron","profile":"usage-watch","is_default_profile":false}]}}"""))
         assertThat(list).containsExactly(
             ChatRow("a", "Trip", "first line", 1700000000.5, pinned = true, profile = "default"),
-            ChatRow("b", null, null, 12.0, running = true, profile = "patch-pilot", defaultProfile = false),
+            ChatRow("b", null, null, 12.0, profile = "patch-pilot", defaultProfile = false),
             ChatRow("t", "@me", null, null, profile = "default", kind = ChatKind.MESSAGING, source = "telegram"),
             ChatRow("c", "daily", null, null, profile = "usage-watch", defaultProfile = false, kind = ChatKind.CRON),
         ).inOrder()

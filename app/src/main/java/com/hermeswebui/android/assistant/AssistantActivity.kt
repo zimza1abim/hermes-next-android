@@ -194,6 +194,8 @@ class AssistantActivity : ComponentActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 // The page opens chats by stored id; this socket's runtime id means nothing to it.
                 .apply { state.storedId?.let { putExtra(HermesKeepAliveService.EXTRA_OPEN_STORED_ID, it) } }
+                // Signing in happens on the Webapp page; once it connects, the native chats come back.
+                .putExtra(HermesKeepAliveService.EXTRA_SIGN_IN, state.link == AssistantLink.SignedOut)
         )
         close()
     }
