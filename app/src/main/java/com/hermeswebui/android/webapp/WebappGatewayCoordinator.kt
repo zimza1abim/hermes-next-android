@@ -30,6 +30,7 @@ import androidx.webkit.WebViewFeature
 import com.hermeswebui.android.R
 import com.hermeswebui.android.data.SettingsRepository
 import com.hermeswebui.android.background.HermesKeepAliveService
+import com.hermeswebui.android.background.HermesWatchdogJob
 import com.hermeswebui.android.webui.HermesWebUiScripts
 import org.json.JSONObject
 import org.json.JSONArray
@@ -668,8 +669,13 @@ class WebappGatewayCoordinator private constructor(
         @Synchronized
         fun obtain(context: Context): WebappGatewayCoordinator = shared ?: run {
             val app = context.applicationContext
+            HermesWatchdogJob.schedule(app)
             WebappGatewayCoordinator(app, SettingsRepository(app).getWebappBackgroundSettings()).also { shared = it }
         }
+
+        /** Whether this process already has a coordinator, which manages the keep-alive service itself. */
+        @Synchronized
+        fun isRunning(): Boolean = shared != null
 
         @Synchronized
         fun restoreService(context: Context) {

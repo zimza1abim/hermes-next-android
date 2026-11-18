@@ -12,6 +12,7 @@ import com.hermeswebui.android.webapp.WebappGatewayCoordinator
 class HermesBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        HermesWatchdogJob.schedule(context)
         if (WebappGatewayCoordinator.wantsHeadlessStart(context)) HermesKeepAliveService.start(context)
     }
 }
