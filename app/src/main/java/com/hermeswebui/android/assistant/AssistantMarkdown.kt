@@ -9,6 +9,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
@@ -239,7 +240,7 @@ internal object AssistantMarkdown {
             val bare = match.groups[5]?.value
             when {
                 bold != null -> withStyle(BOLD) { append(bold) }
-                code != null -> withStyle(CODE) { append(code) }
+                code != null -> withAnnotation(CODE_TAG, "") { withStyle(CODE) { append(code) } }
                 bare != null -> {
                     val url = bare.trimEnd(*TRAILING)
                     link(url, url)
@@ -255,9 +256,12 @@ internal object AssistantMarkdown {
         withLink(LinkAnnotation.Url(url, LINK)) { append(label) }
     }
 
+    /** Marks inline code. Its pink box is drawn behind the text, under the selection highlight, not as a span background over it. */
+    const val CODE_TAG = "code"
+
     private val BOLD = SpanStyle(fontWeight = FontWeight.Bold, color = Rose.Strong)
     private val QUOTED = SpanStyle(color = Rose.Muted)
-    private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 14.5.sp, color = Rose.ChipText, background = Rose.Soft)
+    private val CODE = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 14.5.sp, color = Rose.ChipText)
     private val CODE_BLOCK = SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, background = Rose.Soft)
     private val LINK = TextLinkStyles(SpanStyle(color = Rose.Deep, textDecoration = TextDecoration.Underline))
 }

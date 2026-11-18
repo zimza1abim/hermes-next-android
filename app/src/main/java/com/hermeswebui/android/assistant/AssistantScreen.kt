@@ -87,6 +87,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -619,7 +624,7 @@ internal fun Answer(shown: String, writing: Boolean) {
                 when (block) {
                     is AssistantMarkdown.Block.Paragraph -> {
                         val styled = remember(block, tail) { AssistantMarkdown.inlineText(block.text, caret = tail).let { if (tail) shimmerTail(it) else it } }
-                        Text(styled, style = RoseType.Body)
+                        MarkdownText(styled, style = RoseType.Body)
                     }
                     is AssistantMarkdown.Block.Heading -> HeadingBlock(block)
                     is AssistantMarkdown.Block.Items -> ItemsBlock(block, tail)
@@ -642,7 +647,7 @@ private fun HeadingBlock(block: AssistantMarkdown.Block.Heading) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // A petal marks a section; the two top levels also get a rule under them.
             Box(Modifier.size(width = 4.dp, height = if (block.level <= 2) 20.dp else 16.dp).clip(RoundedCornerShape(2.dp)).background(Rose.Rose))
-            Text(styled, style = RoseType.Body.copy(fontSize = size, lineHeight = size * 1.35f, fontWeight = FontWeight.Bold, color = Rose.Strong), modifier = Modifier.padding(start = 9.dp))
+            MarkdownText(styled, style = RoseType.Body.copy(fontSize = size, lineHeight = size * 1.35f, fontWeight = FontWeight.Bold, color = Rose.Strong), modifier = Modifier.padding(start = 9.dp))
         }
         if (block.level <= 2) Box(Modifier.fillMaxWidth().padding(top = 7.dp).height(1.dp).background(Rose.Border))
     }
@@ -658,7 +663,7 @@ private fun ItemsBlock(block: AssistantMarkdown.Block.Items, tail: Boolean) {
             Row(Modifier.padding(start = (item.depth.coerceAtMost(4) * 16).dp)) {
                 if (item.marker != null) Text(item.marker, style = RoseType.Body.copy(color = Rose.Deep, fontWeight = FontWeight.SemiBold), modifier = Modifier.widthIn(min = 24.dp))
                 else Box(Modifier.width(18.dp).padding(top = 11.dp)) { Box(Modifier.size(6.dp).clip(CircleShape).background(if (item.depth == 0) Rose.Deep else Rose.Rose)) }
-                Text(styled, style = RoseType.Body, modifier = Modifier.weight(1f))
+                MarkdownText(styled, style = RoseType.Body, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -669,8 +674,50 @@ private fun QuoteBlock(block: AssistantMarkdown.Block.Quote) {
     val styled = remember(block) { AssistantMarkdown.inlineText(block.text) }
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(10.dp)).background(Rose.Soft)) {
         Box(Modifier.fillMaxHeight().width(4.dp).background(Rose.Rose))
-        Text(styled, style = RoseType.Body.copy(fontSize = 15.sp, lineHeight = 24.sp), modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp))
+        MarkdownText(styled, style = RoseType.Body.copy(fontSize = 15.sp, lineHeight = 24.sp), modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp))
     }
+}
+
+/**
+ * Answer text whose inline code sits in pink boxes. The boxes are drawn behind the text, so a selection's
+ * highlight shows over them; a span background would be painted over the highlight and hide it.
+ */
+@Composable
+private fun MarkdownText(text: AnnotatedString, style: TextStyle, modifier: Modifier = Modifier) {
+    val codes = remember(text) { text.getStringAnnotations(AssistantMarkdown.CODE_TAG, 0, text.length) }
+    if (codes.isEmpty()) {
+        Text(text, style = style, modifier = modifier)
+        return
+    }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    Text(
+        text,
+        style = style,
+        onTextLayout = { layout = it },
+        modifier = modifier.drawBehind {
+            val result = layout?.takeIf { it.layoutInput.text == text } ?: return@drawBehind
+            val corner = CornerRadius(4.dp.toPx())
+            val pad = 1.5.dp.toPx()
+            codes.forEach { code ->
+                val last = (code.end - 1).coerceAtMost(text.length - 1)
+                if (last < code.start) return@forEach
+                // One box per line the code runs across.
+                for (line in result.getLineForOffset(code.start)..result.getLineForOffset(last)) {
+                    val from = maxOf(code.start, result.getLineStart(line))
+                    val to = minOf(last, result.getLineEnd(line, visibleEnd = true) - 1)
+                    if (to < from) continue
+                    val head = result.getBoundingBox(from)
+                    val tail = result.getBoundingBox(to)
+                    drawRoundRect(
+                        Rose.Soft,
+                        topLeft = Offset(minOf(head.left, tail.left) - pad, head.top),
+                        size = Size(maxOf(head.right, tail.right) - minOf(head.left, tail.left) + pad * 2, head.bottom - head.top),
+                        cornerRadius = corner,
+                    )
+                }
+            }
+        },
+    )
 }
 
 /** A table that scrolls sideways when it is wider than the screen; every column is as wide as its widest cell. */
@@ -682,7 +729,7 @@ private fun TableBlock(block: AssistantMarkdown.Block.Table) {
             Column(Modifier.width(IntrinsicSize.Max)) {
                 block.rows.forEachIndexed { row, cells ->
                     val styled = remember(cells, column) { AssistantMarkdown.inlineText(cells.getOrElse(column) { "" }) }
-                    Text(
+                    MarkdownText(
                         styled,
                         style = RoseType.Body.copy(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = if (row == 0) FontWeight.Bold else FontWeight.Normal, color = if (row == 0) Rose.Strong else Rose.Text),
                         modifier = Modifier.fillMaxWidth().widthIn(max = 240.dp)
