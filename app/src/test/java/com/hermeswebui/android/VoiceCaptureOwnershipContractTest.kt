@@ -9,6 +9,13 @@ import org.junit.Test
  * Hermes WebUI owns voice capture, wake detection, STT and TTS. Android stays a thin host:
  * no native listener that could run beside WebUI's, and no foreground service type that
  * would let microphone capture outlive the activity.
+ *
+ * One exception, by design (docs/voice-acceptance.md): the native voice call. A Hermes voice call is its
+ * own microphone owner — it records 16 kHz for Gemini Live and plays 24 kHz back — and the plan requires
+ * it to survive the screen going off, which on Android 14+ needs a `microphone` foreground service.
+ * The exception is bounded to the voice package and to the one service that serves it, so the original
+ * invariant still has teeth everywhere else: nothing outside `assistant/voice/` may record, and no other
+ * service may declare the microphone.
  */
 class VoiceCaptureOwnershipContractTest {
     private val mainDir: File = listOf(File("src/main"), File("app/src/main"))
@@ -22,20 +29,26 @@ class VoiceCaptureOwnershipContractTest {
         .filter { it.isFile && it.extension == "kt" }
         .associate { it.relativeTo(mainDir).invariantSeparatorsPath to it.readText() }
 
+    /** The only service allowed to ask for the microphone, and the only package allowed to record. */
+    private val voiceServiceName = ".assistant.voice.VoiceService"
+    private val voicePackage = "assistant/voice/"
+
     @Test
-    fun `no foreground service may hold the microphone`() {
-        val serviceTypes = Regex("""android:foregroundServiceType="([^"]*)"""")
+    fun `only the voice call service may hold the microphone`() {
+        val services = Regex("""<service[^>]*android:name="([^"]+)"[^>]*android:foregroundServiceType="([^"]*)"""")
             .findAll(manifest)
-            .map { it.groupValues[1] }
+            .map { it.groupValues[1] to it.groupValues[2] }
             .toList()
 
-        assertThat(serviceTypes).isNotEmpty()
-        serviceTypes.forEach { assertThat(it).doesNotContain("microphone") }
-        assertThat(manifest).doesNotContain("FOREGROUND_SERVICE_MICROPHONE")
+        assertThat(services).isNotEmpty()
+        val microphoneServices = services.filter { (_, type) -> type.contains("microphone") }
+        assertThat(microphoneServices.map { it.first }).containsExactly(voiceServiceName)
+        // The permission is requested only because that one service declares the type.
+        assertThat(manifest).contains("FOREGROUND_SERVICE_MICROPHONE")
     }
 
     @Test
-    fun `android does not create a second microphone listener beside WebUI`() {
+    fun `only the voice call package creates a microphone listener`() {
         val nativeCaptureApis = listOf(
             "android.media.AudioRecord",
             "android.media.MediaRecorder",
@@ -43,11 +56,18 @@ class VoiceCaptureOwnershipContractTest {
             "android.speech.RecognizerIntent"
         )
 
-        kotlinSources.forEach { (path, source) ->
+        val outside = kotlinSources.filterKeys { !it.contains(voicePackage) }
+        assertThat(outside).isNotEmpty()
+        outside.forEach { (path, source) ->
             nativeCaptureApis.forEach { api ->
                 assertWithMessage(path).that(source).doesNotContain(api)
             }
         }
+        // And inside the voice package it is one file that owns the microphone, not several.
+        val recorders = kotlinSources.filterKeys { it.contains(voicePackage) }
+            .filterValues { it.contains("android.media.AudioRecord") }
+            .keys
+        assertThat(recorders.map { it.substringAfterLast('/') }).containsExactly("LiveAudio.kt")
     }
 
     @Test

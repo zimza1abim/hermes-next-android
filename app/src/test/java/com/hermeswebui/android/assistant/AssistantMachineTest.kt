@@ -48,6 +48,54 @@ class AssistantMachineTest {
     private fun created() = feed(reply("session.create") { copy(sessionId = "live-1", storedId = "stored-1") })
 
     @Test
+    fun `SOUL dot md is read from the profile and never written from the app`() {
+        connect()
+        feed(AssistantInput.RefreshSoul("nova"))
+
+        val params = lastCall("profiles.describe").getJSONObject("params")
+        assertThat(params.getString("name")).isEqualTo("nova")
+
+        feed(reply("profiles.describe") { copy(soul = "내 이름은 winter. 반말로 다정하게.") })
+        assertThat(state.souls["nova"]).isEqualTo("내 이름은 winter. 반말로 다정하게.")
+
+        // 앱은 SOUL.md를 쓰지 않는다: 저장 경로(profiles.configure)가 한 번도 나가면 안 된다.
+        assertThat(sent.map { it.getString("method") }).doesNotContain("profiles.configure")
+    }
+
+    @Test
+    fun `a call's lines show up in the chat as they are spoken, then give way to one record`() {
+        connect()
+        feed(AssistantInput.VoiceEcho("echo-1", me = true, text = "서버 디스크 얼마나 남았어?"))
+        feed(AssistantInput.VoiceEcho("echo-2", me = false, text = "132GB 남았어."))
+
+        // Mine is a question bubble, the bot's is an answer bubble: the conversation reads like a chat.
+        assertThat(state.turns.map { it.question }).containsExactly("서버 디스크 얼마나 남았어?", "").inOrder()
+        assertThat(state.turns.last().final).isEqualTo("132GB 남았어.")
+
+        feed(AssistantInput.ClearVoiceEcho(listOf("echo-1", "echo-2")))
+        ask("나: 서버 디스크 얼마나 남았어?\nNova: 132GB 남았어.", id = "record-1")
+        // The preview is gone; the call is one submitted turn, which is what the server keeps.
+        assertThat(state.turns.map { it.id }).containsExactly("record-1")
+    }
+
+    @Test
+    fun `a finished voice call is submitted as a real turn, so it becomes a session`() {
+        connect()
+        val record = "🎙 음성 통화 02:11 · Nova\n나: 안녕\nNova: 응, 안녕"
+        // The regression: this used to be a local-only note, so it never reached the server and the call
+        // was absent from every session list once the screen was refreshed.
+        feed(AssistantInput.Ask("voice-call-1", AssistantMode.ASK, record, record,
+            surface = com.hermeswebui.android.assistant.voice.HermesHandOff.SURFACE))
+
+        assertThat(state.turns.single().question).isEqualTo(record)
+        assertThat(lastCall("session.create")).isNotNull()
+        created()
+        val submit = lastCall("prompt.submit").getJSONObject("params")
+        assertThat(submit.getString("text")).isEqualTo(record)
+        assertThat(submit.getString("surface")).isEqualTo("voice-live")
+    }
+
+    @Test
     fun `a question creates the chat, is submitted with its own id and streams to a final answer`() {
         connect()
         assertThat(sent.map { it.getString("method") }).containsExactly("client.capabilities")
