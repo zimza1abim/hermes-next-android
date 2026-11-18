@@ -8,37 +8,37 @@ Note: this endpoint is nondeterministic at the PCM-sample level (repeat runs of 
 
 | voice | distinct? (sha dup group) | F0 Hz | duration | speech | Korean quality | wav path |
 |---|---|---:|---:|---:|---|---|
-| Zephyr | YES (g1(1)) | 198.8 | 10.96s | 49% | KO-ok(62 Hangul) '안녕하세요! 물어봐 주셔서 감사해요. 저는 아주 상쾌하' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Zephyr.wav` |
-| Puck | YES (g2(1)) | 120.3 | 10.91s | 47% | KO-ok(52 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Puck.wav` |
-| Charon | YES (g3(1)) | 115.7 | 9.75s | 41% | KO-ok(53 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 아' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Charon.wav` |
-| Kore | YES (g4(1)) | 199.3 | 11.76s | 46% | KO-ok(57 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Kore.wav` |
-| Fenrir | YES (g5(1)) | 128.4 | 11.48s | 48% | KO-ok(59 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Fenrir.wav` |
-| Leda | YES (g6(1)) | 203.6 | 11.75s | 52% | KO-ok(60 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Leda.wav` |
-| Orus | YES (g7(1)) | 155.0 | 11.08s | 31% | KO-ok(60 Hangul) '안녕하세요! 물어봐 주셔서 감사해요. 저는 아주 상쾌하' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Orus.wav` |
-| Aoede | YES (g8(1)) | 187.4 | 10.10s | 48% | KO-ok(54 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Aoede.wav` |
-| Callirrhoe | YES (g9(1)) | 200.3 | 11.90s | 46% | KO-ok(61 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Callirrhoe.wav` |
-| Autonoe | YES (g10(1)) | 208.1 | 10.80s | 58% | KO-ok(54 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Autonoe.wav` |
-| Enceladus | YES (g11(1)) | 119.3 | 11.32s | 43% | KO-ok(64 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Enceladus.wav` |
-| Iapetus | DUP->Fenrir (g12(1)) | 123.4 | 12.36s | 51% | KO-ok(63 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Iapetus.wav` |
-| Umbriel | YES (g13(1)) | 201.9 | 22.39s | 73% | KO-ok(62 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Umbriel.wav` |
-| Algieba | YES (g14(1)) | 115.5 | 11.77s | 44% | KO-ok(60 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Algieba.wav` |
-| Despina | YES (g15(1)) | 220.0 | 11.22s | 52% | KO-ok(58 Hangul) '안녕하세요! 다정한 음성 비서님과 함께하게 되어 정말 ' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Despina.wav` |
-| Erinome | YES (g16(1)) | 184.6 | 8.44s | 44% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 사용자님과 함께할 수 ' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Erinome.wav` |
-| Algenib | YES (g17(1)) | 75.1 | 22.28s | 64% | KO-ok(45 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 안부를' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Algenib.wav` |
-| Rasalgethi | YES (g18(1)) | 178.8 | 10.55s | 33% | KO-ok(54 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Rasalgethi.wav` |
-| Laomedeia | YES (g19(1)) | 233.2 | 16.58s | 99% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 인사해' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Laomedeia.wav` |
-| Achernar | YES (g20(1)) | 273.7 | 22.32s | 63% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 인사해' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Achernar.wav` |
-| Alnilam | YES (g21(1)) | 107.5 | 11.92s | 47% | KO-ok(65 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Alnilam.wav` |
-| Schedar | YES (g22(1)) | 166.4 | 15.80s | 62% | KO-ok(53 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Schedar.wav` |
-| Gacrux | YES (g23(1)) | 133.2 | 11.48s | 61% | KO-ok(59 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 기분이 정말 좋아' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Gacrux.wav` |
-| Pulcherrima | YES (g24(1)) | 138.7 | 11.26s | 41% | KO-ok(54 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Pulcherrima.wav` |
-| Achird | YES (g25(1)) | 130.6 | 9.08s | 48% | KO-ok(49 Hangul) '안녕하세요! 저는 아주 상쾌하고 좋아요. 이렇게 다정하' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Achird.wav` |
-| Zubenelgenubi | YES (g26(1)) | 144.5 | 15.82s | 26% | KO-ok(63 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Zubenelgenubi.wav` |
-| Vindemiatrix | YES (g27(1)) | 194.8 | 13.08s | 45% | KO-ok(69 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Vindemiatrix.wav` |
-| Sadachbia | YES (g28(1)) | 204.7 | 6.63s | 51% | KO-ok(69 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 정말 기뻐요. 저는' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Sadachbia.wav` |
-| Sadaltager | YES (g29(1)) | 96.9 | 22.25s | 100% | KO-ok(53 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Sadaltager.wav` |
-| Sulafat | YES (g30(1)) | 202.7 | 22.28s | 36% | KO-ok(61 Hangul) '안녕하세요! 다정한 인사 건네주셔서 정말 기뻐요. 저는' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Sulafat.wav` |
-| NoSuchVoiceXYZ | YES (g31(1)) | 186.8 | 21.98s | 16% | KO-ok(48 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 아' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_NoSuchVoiceXYZ.wav` |
+| Zephyr | YES (g1(1)) | 198.8 | 10.96s | 49% | KO-ok(62 Hangul) '안녕하세요! 물어봐 주셔서 감사해요. 저는 아주 상쾌하' | `<repo>/tools/spike04_Zephyr.wav` |
+| Puck | YES (g2(1)) | 120.3 | 10.91s | 47% | KO-ok(52 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 오' | `<repo>/tools/spike04_Puck.wav` |
+| Charon | YES (g3(1)) | 115.7 | 9.75s | 41% | KO-ok(53 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 아' | `<repo>/tools/spike04_Charon.wav` |
+| Kore | YES (g4(1)) | 199.3 | 11.76s | 46% | KO-ok(57 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `<repo>/tools/spike04_Kore.wav` |
+| Fenrir | YES (g5(1)) | 128.4 | 11.48s | 48% | KO-ok(59 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 언' | `<repo>/tools/spike04_Fenrir.wav` |
+| Leda | YES (g6(1)) | 203.6 | 11.75s | 52% | KO-ok(60 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `<repo>/tools/spike04_Leda.wav` |
+| Orus | YES (g7(1)) | 155.0 | 11.08s | 31% | KO-ok(60 Hangul) '안녕하세요! 물어봐 주셔서 감사해요. 저는 아주 상쾌하' | `<repo>/tools/spike04_Orus.wav` |
+| Aoede | YES (g8(1)) | 187.4 | 10.10s | 48% | KO-ok(54 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 오' | `<repo>/tools/spike04_Aoede.wav` |
+| Callirrhoe | YES (g9(1)) | 200.3 | 11.90s | 46% | KO-ok(61 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `<repo>/tools/spike04_Callirrhoe.wav` |
+| Autonoe | YES (g10(1)) | 208.1 | 10.80s | 58% | KO-ok(54 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `<repo>/tools/spike04_Autonoe.wav` |
+| Enceladus | YES (g11(1)) | 119.3 | 11.32s | 43% | KO-ok(64 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `<repo>/tools/spike04_Enceladus.wav` |
+| Iapetus | DUP->Fenrir (g12(1)) | 123.4 | 12.36s | 51% | KO-ok(63 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `<repo>/tools/spike04_Iapetus.wav` |
+| Umbriel | YES (g13(1)) | 201.9 | 22.39s | 73% | KO-ok(62 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `<repo>/tools/spike04_Umbriel.wav` |
+| Algieba | YES (g14(1)) | 115.5 | 11.77s | 44% | KO-ok(60 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 언' | `<repo>/tools/spike04_Algieba.wav` |
+| Despina | YES (g15(1)) | 220.0 | 11.22s | 52% | KO-ok(58 Hangul) '안녕하세요! 다정한 음성 비서님과 함께하게 되어 정말 ' | `<repo>/tools/spike04_Despina.wav` |
+| Erinome | YES (g16(1)) | 184.6 | 8.44s | 44% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 사용자님과 함께할 수 ' | `<repo>/tools/spike04_Erinome.wav` |
+| Algenib | YES (g17(1)) | 75.1 | 22.28s | 64% | KO-ok(45 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 안부를' | `<repo>/tools/spike04_Algenib.wav` |
+| Rasalgethi | YES (g18(1)) | 178.8 | 10.55s | 33% | KO-ok(54 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 오' | `<repo>/tools/spike04_Rasalgethi.wav` |
+| Laomedeia | YES (g19(1)) | 233.2 | 16.58s | 99% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 인사해' | `<repo>/tools/spike04_Laomedeia.wav` |
+| Achernar | YES (g20(1)) | 273.7 | 22.32s | 63% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 인사해' | `<repo>/tools/spike04_Achernar.wav` |
+| Alnilam | YES (g21(1)) | 107.5 | 11.92s | 47% | KO-ok(65 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `<repo>/tools/spike04_Alnilam.wav` |
+| Schedar | YES (g22(1)) | 166.4 | 15.80s | 62% | KO-ok(53 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `<repo>/tools/spike04_Schedar.wav` |
+| Gacrux | YES (g23(1)) | 133.2 | 11.48s | 61% | KO-ok(59 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 기분이 정말 좋아' | `<repo>/tools/spike04_Gacrux.wav` |
+| Pulcherrima | YES (g24(1)) | 138.7 | 11.26s | 41% | KO-ok(54 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `<repo>/tools/spike04_Pulcherrima.wav` |
+| Achird | YES (g25(1)) | 130.6 | 9.08s | 48% | KO-ok(49 Hangul) '안녕하세요! 저는 아주 상쾌하고 좋아요. 이렇게 다정하' | `<repo>/tools/spike04_Achird.wav` |
+| Zubenelgenubi | YES (g26(1)) | 144.5 | 15.82s | 26% | KO-ok(63 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `<repo>/tools/spike04_Zubenelgenubi.wav` |
+| Vindemiatrix | YES (g27(1)) | 194.8 | 13.08s | 45% | KO-ok(69 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `<repo>/tools/spike04_Vindemiatrix.wav` |
+| Sadachbia | YES (g28(1)) | 204.7 | 6.63s | 51% | KO-ok(69 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 정말 기뻐요. 저는' | `<repo>/tools/spike04_Sadachbia.wav` |
+| Sadaltager | YES (g29(1)) | 96.9 | 22.25s | 100% | KO-ok(53 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 오' | `<repo>/tools/spike04_Sadaltager.wav` |
+| Sulafat | YES (g30(1)) | 202.7 | 22.28s | 36% | KO-ok(61 Hangul) '안녕하세요! 다정한 인사 건네주셔서 정말 기뻐요. 저는' | `<repo>/tools/spike04_Sulafat.wav` |
+| NoSuchVoiceXYZ | YES (g31(1)) | 186.8 | 21.98s | 16% | KO-ok(48 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 아' | `<repo>/tools/spike04_NoSuchVoiceXYZ.wav` |
 
 ## LTAS identity clusters (LTAS distance < 0.15)
 - Zephyr (F0 198.8 Hz): Zephyr

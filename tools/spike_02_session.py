@@ -4,8 +4,8 @@ Everything printed as a MEASUREMENT was observed on the wire by this script.
 Doc claims, if any, are labelled "unverified" and are never mixed into the table.
 
 Run (from any cwd; ~3m20s with the default 120s goAway watch):
-    "/Users/kanyevelvet/.hermes/hermes-work/_venv/bin/python" \
-        "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_02_session.py" [--goaway-seconds N]
+    "~/venv/bin/python" \
+        "<repo>/tools/spike_02_session.py" [--goaway-seconds N]
 
 Outputs tools/spike_02_session.json next to this file.
 """

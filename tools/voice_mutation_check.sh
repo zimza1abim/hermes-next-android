@@ -2,7 +2,7 @@
 # Prove the guards bite: break one rule at a time, show the named test fail, restore, show it pass.
 # Every edit is reverted from a backup copy, so nothing is left changed.
 set -u
-ROOT="/Users/kanyevelvet/.hermes/hermes-work/hermes native"
+ROOT="<repo>"
 cd "$ROOT" || exit 1
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 MACHINE="app/src/main/java/com/hermeswebui/android/assistant/voice/LiveMachine.kt"

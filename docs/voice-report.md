@@ -93,7 +93,7 @@
 ## 실행
 
 ```bash
-cd "/Users/kanyevelvet/Documents/Claude/hermes native" && JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :app:assembleDebug --offline
+cd "<repo>" && JAVA_HOME=$(/usr/libexec/java_home -v 21) ./gradlew :app:assembleDebug --offline
 adb install -r app/build/outputs/apk/debug/hermes-next-v1.0.0-debug.apk   # 패키지: dev.hermes.next.debug
 ```
 

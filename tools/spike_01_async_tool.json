@@ -168,7 +168,7 @@
       "result_audio_bytes": 310560,
       "interrupted_after_response": false,
       "closed": null,
-      "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_01_delay5s_INTERRUPT.wav",
+      "wav": "<repo>/tools/spike_01_delay5s_INTERRUPT.wav",
       "retries": 0
     },
     {
@@ -274,7 +274,7 @@
       "result_audio_bytes": 354720,
       "interrupted_after_response": false,
       "closed": null,
-      "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_01_delay15s_WHEN_IDLE.wav",
+      "wav": "<repo>/tools/spike_01_delay15s_WHEN_IDLE.wav",
       "retries": 0
     },
     {
@@ -330,7 +330,7 @@
       "result_audio_bytes": 0,
       "interrupted_after_response": false,
       "closed": null,
-      "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_01_delay5s_SILENT.wav",
+      "wav": "<repo>/tools/spike_01_delay5s_SILENT.wav",
       "retries": 0
     }
   ],
@@ -427,7 +427,7 @@
     "result_audio_bytes": 256802,
     "interrupted_after_response": false,
     "closed": null,
-    "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_01_delay5s_INTERRUPT.wav",
+    "wav": "<repo>/tools/spike_01_delay5s_INTERRUPT.wav",
     "retries": 0
   },
   "interject_while_waiting": {
@@ -560,7 +560,7 @@
     "nudge_audio_bytes": 472320,
     "nudge_text": "응, 나왔어. 512GB 중에서 380GB 사용 중이라 132GB 남았고, 사용률은 74%야.",
     "nudge_to_audio_ms": 860,
-    "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_01_delay6s_INTERRUPT.wav",
+    "wav": "<repo>/tools/spike_01_delay6s_INTERRUPT.wav",
     "retries": 0
   },
   "control_blocking": {
@@ -661,7 +661,7 @@
     "result_audio_bytes": 310560,
     "interrupted_after_response": false,
     "closed": null,
-    "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_01_delay5s_INTERRUPT.wav",
+    "wav": "<repo>/tools/spike_01_delay5s_INTERRUPT.wav",
     "retries": 0
   },
   "retries_total": 0,

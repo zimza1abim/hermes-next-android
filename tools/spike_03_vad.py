@@ -12,8 +12,8 @@ Answers three questions with measurements, not docs:
 Plus: does manual mode (automaticActivityDetection.disabled) work, and does
 activityEnd trigger a response immediately?
 
-Run:  "/Users/kanyevelvet/.hermes/hermes-work/_venv/bin/python" \
-        "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike_03_vad.py"
+Run:  "~/venv/bin/python" \
+        "<repo>/tools/spike_03_vad.py"
 
 Timing method
 -------------
