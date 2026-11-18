@@ -1,0 +1,683 @@
+{
+  "model": "gemini-3.8-live",
+  "started_at": "2026-11-18T16:15:21+0900",
+  "config_variants": [
+    {
+      "accepted": true,
+      "setup_ms": 351,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"89a2bf90-0c99-466e-a0b2-33ce50b2f705\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.539,
+          "newHandle": "89a2bf90-0c99-466e-a0b2-33ce50b2f705",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": null,
+      "variant": "(baseline: no session config)",
+      "extra": {}
+    },
+    {
+      "accepted": true,
+      "setup_ms": 304,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"bba428a6-ffef-4996-a625-c2fea1292100\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.475,
+          "newHandle": "bba428a6-ffef-4996-a625-c2fea1292100",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": null,
+      "variant": "sessionResumption: {}",
+      "extra": {
+        "sessionResumption": {}
+      }
+    },
+    {
+      "accepted": true,
+      "setup_ms": 737,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"8194fd90-fac8-4d72-9ba3-bf9c48517ba1\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.891,
+          "newHandle": "8194fd90-fac8-4d72-9ba3-bf9c48517ba1",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": null,
+      "variant": "sessionResumption: {handle: <real>}",
+      "extra": {
+        "sessionResumption": {
+          "handle": "497391cc-76fb-4954-9ca0-f187ed1b6083"
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "setup_ms": null,
+      "error": "ConnectionClosedError: received 1008 (policy violation) BidiGenerateContent session not found; then sent 1008 (policy violation) BidiGenerateContent session not found",
+      "close_code": 1008,
+      "close_reason": "BidiGenerateContent session not found",
+      "error_json": null,
+      "first_msg_kind": null,
+      "first_msg": null,
+      "drained_kinds": [],
+      "resumption_updates": [],
+      "post": null,
+      "variant": "sessionResumption: {handle: <invalid>}",
+      "extra": {
+        "sessionResumption": {
+          "handle": "not-a-real-handle-0000"
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "setup_ms": 329,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"de95fb3a-0397-4af7-a012-edf00f34d805\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.496,
+          "newHandle": "de95fb3a-0397-4af7-a012-edf00f34d805",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": null,
+      "variant": "contextWindowCompression: {slidingWindow: {targetTokens: 2000}}",
+      "extra": {
+        "contextWindowCompression": {
+          "slidingWindow": {
+            "targetTokens": 2000
+          }
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "setup_ms": null,
+      "error": "ConnectionClosedError: received 1007 (invalid frame payload data) Invalid JSON payload received. Unknown name \"triggerTokens\" at 'setup.context_window_compression.sliding_window': Cannot fi; then sent 1007 (invalid frame payload data) Invalid JSON payload received. Unknown name \"triggerTokens\" at 'setup.context_window_compression.sliding_window': Cannot fi",
+      "close_code": 1007,
+      "close_reason": "Invalid JSON payload received. Unknown name \"triggerTokens\" at 'setup.context_window_compression.sliding_window': Cannot fi",
+      "error_json": null,
+      "first_msg_kind": null,
+      "first_msg": null,
+      "drained_kinds": [],
+      "resumption_updates": [],
+      "post": null,
+      "variant": "contextWindowCompression: {slidingWindow: {triggerTokens: 8000}}",
+      "extra": {
+        "contextWindowCompression": {
+          "slidingWindow": {
+            "triggerTokens": 8000
+          }
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "setup_ms": 339,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"984bc7c7-146a-48ce-a514-e0897e6284fe\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.512,
+          "newHandle": "984bc7c7-146a-48ce-a514-e0897e6284fe",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": null,
+      "variant": "contextWindowCompression: {slidingWindow: {}}",
+      "extra": {
+        "contextWindowCompression": {
+          "slidingWindow": {}
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "setup_ms": 322,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"7d2403f1-c9ef-4816-a64d-1ec6ef3d70e6\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.49,
+          "newHandle": "7d2403f1-c9ef-4816-a64d-1ec6ef3d70e6",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": null,
+      "variant": "contextWindowCompression: {}",
+      "extra": {
+        "contextWindowCompression": {}
+      }
+    }
+  ],
+  "resumption_stream": {
+    "accepted": true,
+    "setup_ms": 348,
+    "error": null,
+    "close_code": null,
+    "close_reason": null,
+    "error_json": null,
+    "first_msg_kind": "sessionResumptionUpdate",
+    "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"497391cc-76fb-4954-9ca0-f187ed1b6083\", \"resumable\": true}}",
+    "drained_kinds": [
+      "sessionResumptionUpdate"
+    ],
+    "resumption_updates": [
+      {
+        "t": 0.532,
+        "newHandle": "497391cc-76fb-4954-9ca0-f187ed1b6083",
+        "handle_len": 36,
+        "resumable": true,
+        "fields": [
+          "newHandle",
+          "resumable"
+        ]
+      }
+    ],
+    "post": {
+      "turns": [
+        {
+          "asked": "안녕, 한 문장으로 인사해줘.",
+          "in": "",
+          "out": "안녕, 만나서 반가워!",
+          "turn_complete": true,
+          "ms": 3365,
+          "audio_bytes": 101280,
+          "empty_frames": 7
+        },
+        {
+          "asked": "오늘 뭐 하면 좋을까? 한 문장.",
+          "in": "",
+          "out": "가까운 공원에서 가볍게 산책하는 게 좋겠어.",
+          "turn_complete": true,
+          "ms": 3994,
+          "audio_bytes": 168482,
+          "empty_frames": 15
+        },
+        {
+          "asked": "고마워, 한 문장으로 마무리해줘.",
+          "in": "",
+          "out": "언제든 또 필요할 때 얘기해.",
+          "turn_complete": true,
+          "ms": 2960,
+          "audio_bytes": 104640,
+          "empty_frames": 8
+        }
+      ],
+      "update_count": 1,
+      "updates": [
+        {
+          "t": 0.532,
+          "newHandle": "497391cc-76fb-4954-9ca0-f187ed1b6083",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "latest_handle": "497391cc-76fb-4954-9ca0-f187ed1b6083",
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown"
+      ]
+    }
+  },
+  "resume_test": {
+    "session_a": {
+      "accepted": true,
+      "setup_ms": 331,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"a9ffeb3a-654c-49ac-b9a7-51fee6804b1e\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.504,
+          "newHandle": "a9ffeb3a-654c-49ac-b9a7-51fee6804b1e",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": {
+        "turns": [
+          {
+            "asked": "내가 제일 좋아하는 숫자는 47이야. 잘 기억해 둬.",
+            "in": "",
+            "out": "네가 제일 좋아하는 숫자 47, 잘 기억해 둘게.",
+            "turn_complete": true,
+            "ms": 4715,
+            "audio_bytes": 177602,
+            "empty_frames": 12
+          },
+          {
+            "asked": "그리고 내가 사는 도시는 부산이야.",
+            "in": "",
+            "out": "네가 사는 도시 부산도 잘 기억할게.",
+            "turn_complete": true,
+            "ms": 3580,
+            "audio_bytes": 142080,
+            "empty_frames": 11
+          },
+          {
+            "asked": "응, 알겠어. 지금은 그냥 짧게 대답해줘.",
+            "in": "",
+            "out": "응, 알겠어. 그렇게 할게.",
+            "turn_complete": true,
+            "ms": 2931,
+            "audio_bytes": 108960,
+            "empty_frames": 8
+          }
+        ],
+        "updates": [
+          {
+            "t": 0.504,
+            "newHandle": "a9ffeb3a-654c-49ac-b9a7-51fee6804b1e",
+            "handle_len": 36,
+            "resumable": true,
+            "fields": [
+              "newHandle",
+              "resumable"
+            ]
+          }
+        ],
+        "update_count": 1,
+        "latest_handle": "a9ffeb3a-654c-49ac-b9a7-51fee6804b1e",
+        "kinds": [
+          "serverContent",
+          "sessionResumptionUpdate",
+          "setupComplete",
+          "unknown"
+        ]
+      }
+    },
+    "session_b": {
+      "accepted": true,
+      "setup_ms": 599,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"6e88cd0f-a8e4-48db-8c93-9dafccfc8e8a\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.746,
+          "newHandle": "6e88cd0f-a8e4-48db-8c93-9dafccfc8e8a",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": {
+        "turns": [
+          {
+            "asked": "내가 제일 좋아하는 숫자가 뭐라고 했지? 숫자만 말해.",
+            "in": "",
+            "out": "47이야.",
+            "turn_complete": true,
+            "ms": 1748,
+            "audio_bytes": 59520,
+            "empty_frames": 8
+          }
+        ],
+        "answer": "47이야.",
+        "updates": [
+          {
+            "t": 0.746,
+            "newHandle": "6e88cd0f-a8e4-48db-8c93-9dafccfc8e8a",
+            "handle_len": 36,
+            "resumable": true,
+            "fields": [
+              "newHandle",
+              "resumable"
+            ]
+          }
+        ]
+      }
+    },
+    "control_no_handle": {
+      "accepted": true,
+      "setup_ms": 287,
+      "error": null,
+      "close_code": null,
+      "close_reason": null,
+      "error_json": null,
+      "first_msg_kind": "sessionResumptionUpdate",
+      "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"e23e6ed4-85df-487b-8334-74f0e1246e9b\", \"resumable\": true}}",
+      "drained_kinds": [
+        "sessionResumptionUpdate"
+      ],
+      "resumption_updates": [
+        {
+          "t": 0.446,
+          "newHandle": "e23e6ed4-85df-487b-8334-74f0e1246e9b",
+          "handle_len": 36,
+          "resumable": true,
+          "fields": [
+            "newHandle",
+            "resumable"
+          ]
+        }
+      ],
+      "post": {
+        "turns": [
+          {
+            "asked": "내가 제일 좋아하는 숫자가 뭐라고 했지? 숫자만 말해.",
+            "in": "",
+            "out": "기억나지 않아.",
+            "turn_complete": true,
+            "ms": 2428,
+            "audio_bytes": 58560,
+            "empty_frames": 4
+          }
+        ],
+        "answer": "기억나지 않아.",
+        "updates": [
+          {
+            "t": 0.446,
+            "newHandle": "e23e6ed4-85df-487b-8334-74f0e1246e9b",
+            "handle_len": 36,
+            "resumable": true,
+            "fields": [
+              "newHandle",
+              "resumable"
+            ]
+          }
+        ]
+      }
+    },
+    "handle_used": "a9ffeb3a-654c-49ac-b9a7-51fee6804b1e",
+    "handle_len": 36,
+    "answer_text": "47이야.",
+    "remembered_47": true,
+    "control_answer_text": "기억나지 않아.",
+    "control_remembered_47": false,
+    "a_turns": [
+      {
+        "asked": "내가 제일 좋아하는 숫자는 47이야. 잘 기억해 둬.",
+        "in": "",
+        "out": "네가 제일 좋아하는 숫자 47, 잘 기억해 둘게.",
+        "turn_complete": true,
+        "ms": 4715,
+        "audio_bytes": 177602,
+        "empty_frames": 12
+      },
+      {
+        "asked": "그리고 내가 사는 도시는 부산이야.",
+        "in": "",
+        "out": "네가 사는 도시 부산도 잘 기억할게.",
+        "turn_complete": true,
+        "ms": 3580,
+        "audio_bytes": 142080,
+        "empty_frames": 11
+      },
+      {
+        "asked": "응, 알겠어. 지금은 그냥 짧게 대답해줘.",
+        "in": "",
+        "out": "응, 알겠어. 그렇게 할게.",
+        "turn_complete": true,
+        "ms": 2931,
+        "audio_bytes": 108960,
+        "empty_frames": 8
+      }
+    ],
+    "b_turns": [
+      {
+        "asked": "내가 제일 좋아하는 숫자가 뭐라고 했지? 숫자만 말해.",
+        "in": "",
+        "out": "47이야.",
+        "turn_complete": true,
+        "ms": 1748,
+        "audio_bytes": 59520,
+        "empty_frames": 8
+      }
+    ],
+    "b_accepted": true,
+    "b_error": null
+  },
+  "goaway": {
+    "accepted": true,
+    "setup_ms": 288,
+    "error": null,
+    "close_code": null,
+    "close_reason": null,
+    "error_json": null,
+    "first_msg_kind": null,
+    "first_msg": null,
+    "drained_kinds": [],
+    "resumption_updates": [
+      {
+        "t": 0.458,
+        "newHandle": "7c9bdd3b-1bb6-4948-8097-8e407aec29b9",
+        "handle_len": 36,
+        "resumable": true,
+        "fields": [
+          "newHandle",
+          "resumable"
+        ]
+      }
+    ],
+    "post": {
+      "requested_seconds": 120,
+      "observed_seconds": 120.0,
+      "keepalives_sent": 5,
+      "messages": [
+        {
+          "t": 0.0,
+          "kind": "sessionResumptionUpdate"
+        }
+      ],
+      "goaway": null,
+      "socket_closed": null,
+      "close_code": null,
+      "close_reason": null,
+      "update_count": 1
+    }
+  },
+  "compression": {
+    "accepted": true,
+    "setup_ms": 934,
+    "error": null,
+    "close_code": null,
+    "close_reason": null,
+    "error_json": null,
+    "first_msg_kind": "sessionResumptionUpdate",
+    "first_msg": "{\"sessionResumptionUpdate\": {\"newHandle\": \"9cc54888-d910-4be0-91ac-0bf6349f4c07\", \"resumable\": true}}",
+    "drained_kinds": [
+      "sessionResumptionUpdate"
+    ],
+    "resumption_updates": [
+      {
+        "t": 1.087,
+        "newHandle": "9cc54888-d910-4be0-91ac-0bf6349f4c07",
+        "handle_len": 36,
+        "resumable": true,
+        "fields": [
+          "newHandle",
+          "resumable"
+        ]
+      }
+    ],
+    "post": {
+      "turns": [
+        {
+          "asked": "1부터 10까지 세어줘.",
+          "in": "",
+          "out": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10.",
+          "turn_complete": true,
+          "ms": 7445,
+          "audio_bytes": 327360,
+          "empty_frames": 20
+        },
+        {
+          "asked": "가장 좋아하는 계절은? 한 문장.",
+          "in": "",
+          "out": "나는 선선한 바람이 부는 가을이 제일 좋아.",
+          "turn_complete": true,
+          "ms": 4030,
+          "audio_bytes": 170882,
+          "empty_frames": 14
+        },
+        {
+          "asked": "지금 몇 시쯤일까? 한 문장.",
+          "in": "",
+          "out": "지금은 7시 18분이야.",
+          "turn_complete": true,
+          "ms": 4074,
+          "audio_bytes": 164640,
+          "empty_frames": 12
+        },
+        {
+          "asked": "커피와 차 중 뭐가 좋아? 한 문장.",
+          "in": "",
+          "out": "나는 향긋한 커피가 더 좋아.",
+          "turn_complete": true,
+          "ms": 2969,
+          "audio_bytes": 115200,
+          "empty_frames": 10
+        },
+        {
+          "asked": "오늘 날씨를 상상해서 한 문장.",
+          "in": "",
+          "out": "따뜻한 햇살에 기분 좋은 바람이 불어.",
+          "turn_complete": true,
+          "ms": 3719,
+          "audio_bytes": 144960,
+          "empty_frames": 9
+        },
+        {
+          "asked": "마지막으로 응원 한마디 해줘.",
+          "in": "",
+          "out": "오늘도 정말 수고했어, 힘내자.",
+          "turn_complete": true,
+          "ms": 3718,
+          "audio_bytes": 145920,
+          "empty_frames": 10
+        }
+      ],
+      "turns_requested": 6,
+      "turns_with_turn_complete": 6,
+      "kinds": {
+        "setupComplete": 1,
+        "sessionResumptionUpdate": 1,
+        "{}": 75,
+        "serverContent": 87
+      },
+      "top_level_keys_seen": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "usageMetadata"
+      ],
+      "server_content_keys_seen": [
+        "generationComplete",
+        "modelTurn",
+        "outputTranscription",
+        "turnComplete"
+      ],
+      "update_count": 1,
+      "latest_handle": "9cc54888-d910-4be0-91ac-0bf6349f4c07"
+    }
+  },
+  "endpoint_notes": "server-side numbers (session limit, goAway timeLeft) are only reported if observed",
+  "retries": [],
+  "finished_at": "2026-11-18T16:18:39+0900"
+}

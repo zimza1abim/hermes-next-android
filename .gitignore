@@ -24,3 +24,6 @@ app/release/
 # Live-QA harness: server URL and run reports are local-only (see tools/qa/README.md).
 /tools/qa/.env.qa
 /tools/qa/out/
+
+# Voice spike audio samples (reproducible with tools/spike_04_voices.py; too large for the repo)
+tools/*.wav

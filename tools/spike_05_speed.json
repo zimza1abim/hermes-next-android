@@ -1,0 +1,43 @@
+{
+  "probes": [
+    {
+      "label": "speechConfig.speakingRate=1.5",
+      "accepted": false,
+      "error": "ConnectionClosedError(Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechConfig\" at \\'setup\\': Cannot find field.'), Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechCo"
+    },
+    {
+      "label": "speechConfig.speakingRate=0.8",
+      "accepted": false,
+      "error": "ConnectionClosedError(Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechConfig\" at \\'setup\\': Cannot find field.'), Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechCo"
+    },
+    {
+      "label": "speechConfig.speed=1.5",
+      "accepted": false,
+      "error": "ConnectionClosedError(Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechConfig\" at \\'setup\\': Cannot find field.'), Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechCo"
+    },
+    {
+      "label": "generationConfig.speakingRate=1.5",
+      "accepted": false,
+      "error": "ConnectionClosedError(Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speakingRate\" at \\'setup.generation_config\\': Cannot find field.'), Close(code=1007, reason='Invalid JSON payload received. Unkn"
+    },
+    {
+      "label": "generationConfig.speechConfig.speakingRate=1.5",
+      "accepted": false,
+      "error": "ConnectionClosedError(Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speakingRate\" at \\'setup.generation_config.speech_config\\': Cannot find field.'), Close(code=1007, reason='Invalid JSON payload "
+    },
+    {
+      "label": "speechConfig SAPI-style speaking_rate=1.5",
+      "accepted": false,
+      "error": "ConnectionClosedError(Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechConfig\" at \\'setup\\': Cannot find field.'), Close(code=1007, reason='Invalid JSON payload received. Unknown name \"speechCo"
+    }
+  ],
+  "runs": [
+    {
+      "rate": null,
+      "seconds": 4.59,
+      "bytes": 220322,
+      "spoken": " 오늘 하루도 정말 고생 많았어. 잠깐 쉬어",
+      "wav": "/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike05_speed_default.wav"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+### rule: Ended cleans up exactly once
+expected failing test contains: tears down once
+> Task :app:testDebugUnitTest FAILED
+LiveMachineTest > hang-up tears down once and names every resource FAILED
+BUILD FAILED in 1s
+=> VERDICT: the guard caught the broken rule (test failed as named)
+
+### rule: an interruption keeps the pending Hermes answer
+expected failing test contains: keeps the answer
+> Task :app:testDebugUnitTest FAILED
+LiveMachineTest > interrupting while Hermes works keeps the answer FAILED
+BUILD FAILED in 1s
+=> VERDICT: the guard caught the broken rule (test failed as named)
+
+### rule: 90 s is the delegation deadline
+expected failing test contains: 90 seconds
+> Task :app:testDebugUnitTest FAILED
+LiveMachineTest > 90 seconds is the line between waiting and failing FAILED
+BUILD FAILED in 1s
+=> VERDICT: the guard caught the broken rule (test failed as named)
+
+### rule: every prompt keeps the four always-rules
+expected failing test contains: keeps all four rules
+> Task :app:testDebugUnitTest FAILED
+PersonaTest > write-your-own sits in the preset slot, not after the rules FAILED
+PersonaTest > custom words replace the preset text and never remove the rules FAILED
+PersonaTest > empty custom text falls back to the warm preset instead of an empty prompt FAILED
+PersonaTest > the assembly order never changes FAILED
+PersonaTest > every preset and strength keeps all four rules FAILED
+BUILD FAILED in 996ms
+=> VERDICT: the guard caught the broken rule (test failed as named)
+
+=== restored; final verification run ===
+BUILD SUCCESSFUL in 707ms
+ M app/src/main/AndroidManifest.xml
+ M app/src/main/java/com/hermeswebui/android/assistant/AssistantActivity.kt
+ M app/src/main/java/com/hermeswebui/android/assistant/AssistantController.kt
+ M app/src/main/java/com/hermeswebui/android/assistant/AssistantMachine.kt
+ M app/src/main/java/com/hermeswebui/android/assistant/AssistantProtocol.kt

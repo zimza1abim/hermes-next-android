@@ -1,0 +1,145 @@
+
+# Spike 04 - Gemini Live prebuilt voice sweep
+
+Model: `gemini-3.8-live`  |  languageCode: `ko-KR`  |  temperature: `0`
+Fixed input: `안녕하세요. 저는 하루를 함께 보내는 음성 비서예요. 오늘 기분은 어떠세요?`
+
+Note: this endpoint is nondeterministic at the PCM-sample level (repeat runs of one voice have different sha256). Identity is therefore decided by LTAS timbre distance (<0.15); exact sha groups are shown only for the record.
+
+| voice | distinct? (sha dup group) | F0 Hz | duration | speech | Korean quality | wav path |
+|---|---|---:|---:|---:|---|---|
+| Zephyr | YES (g1(1)) | 198.8 | 10.96s | 49% | KO-ok(62 Hangul) '안녕하세요! 물어봐 주셔서 감사해요. 저는 아주 상쾌하' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Zephyr.wav` |
+| Puck | YES (g2(1)) | 120.3 | 10.91s | 47% | KO-ok(52 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Puck.wav` |
+| Charon | YES (g3(1)) | 115.7 | 9.75s | 41% | KO-ok(53 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 아' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Charon.wav` |
+| Kore | YES (g4(1)) | 199.3 | 11.76s | 46% | KO-ok(57 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Kore.wav` |
+| Fenrir | YES (g5(1)) | 128.4 | 11.48s | 48% | KO-ok(59 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Fenrir.wav` |
+| Leda | YES (g6(1)) | 203.6 | 11.75s | 52% | KO-ok(60 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Leda.wav` |
+| Orus | YES (g7(1)) | 155.0 | 11.08s | 31% | KO-ok(60 Hangul) '안녕하세요! 물어봐 주셔서 감사해요. 저는 아주 상쾌하' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Orus.wav` |
+| Aoede | YES (g8(1)) | 187.4 | 10.10s | 48% | KO-ok(54 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Aoede.wav` |
+| Callirrhoe | YES (g9(1)) | 200.3 | 11.90s | 46% | KO-ok(61 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Callirrhoe.wav` |
+| Autonoe | YES (g10(1)) | 208.1 | 10.80s | 58% | KO-ok(54 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Autonoe.wav` |
+| Enceladus | YES (g11(1)) | 119.3 | 11.32s | 43% | KO-ok(64 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Enceladus.wav` |
+| Iapetus | DUP->Fenrir (g12(1)) | 123.4 | 12.36s | 51% | KO-ok(63 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Iapetus.wav` |
+| Umbriel | YES (g13(1)) | 201.9 | 22.39s | 73% | KO-ok(62 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Umbriel.wav` |
+| Algieba | YES (g14(1)) | 115.5 | 11.77s | 44% | KO-ok(60 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 언' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Algieba.wav` |
+| Despina | YES (g15(1)) | 220.0 | 11.22s | 52% | KO-ok(58 Hangul) '안녕하세요! 다정한 음성 비서님과 함께하게 되어 정말 ' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Despina.wav` |
+| Erinome | YES (g16(1)) | 184.6 | 8.44s | 44% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 사용자님과 함께할 수 ' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Erinome.wav` |
+| Algenib | YES (g17(1)) | 75.1 | 22.28s | 64% | KO-ok(45 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 안부를' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Algenib.wav` |
+| Rasalgethi | YES (g18(1)) | 178.8 | 10.55s | 33% | KO-ok(54 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Rasalgethi.wav` |
+| Laomedeia | YES (g19(1)) | 233.2 | 16.58s | 99% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 인사해' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Laomedeia.wav` |
+| Achernar | YES (g20(1)) | 273.7 | 22.32s | 63% | KO-ok(42 Hangul) '안녕하세요! 저는 아주 좋아요. 이렇게 다정하게 인사해' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Achernar.wav` |
+| Alnilam | YES (g21(1)) | 107.5 | 11.92s | 47% | KO-ok(65 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Alnilam.wav` |
+| Schedar | YES (g22(1)) | 166.4 | 15.80s | 62% | KO-ok(53 Hangul) '안녕하세요! 다정한 음성 비서님을 만나게 되어 정말 기' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Schedar.wav` |
+| Gacrux | YES (g23(1)) | 133.2 | 11.48s | 61% | KO-ok(59 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 기분이 정말 좋아' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Gacrux.wav` |
+| Pulcherrima | YES (g24(1)) | 138.7 | 11.26s | 41% | KO-ok(54 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Pulcherrima.wav` |
+| Achird | YES (g25(1)) | 130.6 | 9.08s | 48% | KO-ok(49 Hangul) '안녕하세요! 저는 아주 상쾌하고 좋아요. 이렇게 다정하' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Achird.wav` |
+| Zubenelgenubi | YES (g26(1)) | 144.5 | 15.82s | 26% | KO-ok(63 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Zubenelgenubi.wav` |
+| Vindemiatrix | YES (g27(1)) | 194.8 | 13.08s | 45% | KO-ok(69 Hangul) '안녕하세요! 다정한 인사를 건네주셔서 정말 기뻐요. 저' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Vindemiatrix.wav` |
+| Sadachbia | YES (g28(1)) | 204.7 | 6.63s | 51% | KO-ok(69 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 정말 기뻐요. 저는' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Sadachbia.wav` |
+| Sadaltager | YES (g29(1)) | 96.9 | 22.25s | 100% | KO-ok(53 Hangul) '안녕하세요! 따뜻하게 물어봐 주셔서 감사해요. 저는 오' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Sadaltager.wav` |
+| Sulafat | YES (g30(1)) | 202.7 | 22.28s | 36% | KO-ok(61 Hangul) '안녕하세요! 다정한 인사 건네주셔서 정말 기뻐요. 저는' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_Sulafat.wav` |
+| NoSuchVoiceXYZ | YES (g31(1)) | 186.8 | 21.98s | 16% | KO-ok(48 Hangul) '안녕하세요! 따뜻한 인사 건네주셔서 감사해요. 저는 아' | `/Users/kanyevelvet/.hermes/hermes-work/hermes native/tools/spike04_NoSuchVoiceXYZ.wav` |
+
+## LTAS identity clusters (LTAS distance < 0.15)
+- Zephyr (F0 198.8 Hz): Zephyr
+- Puck (F0 120.3 Hz): Puck
+- Charon (F0 115.7 Hz): Charon
+- Kore (F0 199.3 Hz): Kore
+- Fenrir (F0 128.4 Hz): Fenrir, Iapetus  <-- fallback cluster
+- Leda (F0 203.6 Hz): Leda
+- Orus (F0 155.0 Hz): Orus
+- Aoede (F0 187.4 Hz): Aoede
+- Callirrhoe (F0 200.3 Hz): Callirrhoe
+- Autonoe (F0 208.1 Hz): Autonoe
+- Enceladus (F0 119.3 Hz): Enceladus
+- Umbriel (F0 201.9 Hz): Umbriel
+- Algieba (F0 115.5 Hz): Algieba
+- Despina (F0 220.0 Hz): Despina
+- Erinome (F0 184.6 Hz): Erinome
+- Algenib (F0 75.1 Hz): Algenib
+- Rasalgethi (F0 178.8 Hz): Rasalgethi
+- Laomedeia (F0 233.2 Hz): Laomedeia
+- Achernar (F0 273.7 Hz): Achernar
+- Alnilam (F0 107.5 Hz): Alnilam
+- Schedar (F0 166.4 Hz): Schedar
+- Gacrux (F0 133.2 Hz): Gacrux
+- Pulcherrima (F0 138.7 Hz): Pulcherrima
+- Achird (F0 130.6 Hz): Achird
+- Zubenelgenubi (F0 144.5 Hz): Zubenelgenubi
+- Vindemiatrix (F0 194.8 Hz): Vindemiatrix
+- Sadachbia (F0 204.7 Hz): Sadachbia
+- Sadaltager (F0 96.9 Hz): Sadaltager
+- Sulafat (F0 202.7 Hz): Sulafat
+- NoSuchVoiceXYZ (F0 186.8 Hz): NoSuchVoiceXYZ
+
+## Exact sha256 groups (informational; endpoint is nondeterministic)
+- 5dd7629fb063ef4c x1: Zephyr
+- 29477eb3a82ebca4 x1: Puck
+- 205003567f487aa6 x1: Charon
+- 61ce1c28b194eb24 x1: Kore
+- 18088feee79b7317 x1: Fenrir
+- 979131d8178626ed x1: Leda
+- 5afc49dd321c534d x1: Orus
+- 30f5871ff40f8b32 x1: Aoede
+- 4c0b3800d371c8ee x1: Callirrhoe
+- 82bca894240d48cd x1: Autonoe
+- 809c919283943cc9 x1: Enceladus
+- 791de35d16037a99 x1: Iapetus
+- 3b598380e7b24051 x1: Umbriel
+- 2d8f6370201183ff x1: Algieba
+- a59e21bc34cd2f43 x1: Despina
+- 4d45c96015cc280b x1: Erinome
+- 7d49b076c5874dbe x1: Algenib
+- 26469375deb9cde7 x1: Rasalgethi
+- 6d34435a729a769e x1: Laomedeia
+- d0a4790b56c76d3a x1: Achernar
+- 90bd2c299fe95374 x1: Alnilam
+- e7d73a753b9b8ed2 x1: Schedar
+- 7c4cae132c9314f6 x1: Gacrux
+- e96f198539e540eb x1: Pulcherrima
+- e5e0870e39edd4b6 x1: Achird
+- c4614c627bfe5d67 x1: Zubenelgenubi
+- e6cd033aa0843cea x1: Vindemiatrix
+- c16cb3293261ab08 x1: Sadachbia
+- 555b5486807f82f8 x1: Sadaltager
+- 60fab66e8ba5bb0d x1: Sulafat
+- 76726881547279e1 x1: NoSuchVoiceXYZ
+
+## Invalid-name reference (NoSuchVoiceXYZ)
+- YES | cluster=['NoSuchVoiceXYZ'] | nearest=Zephyr (LTAS 0.179) | F0=186.8 Hz
+
+## Real distinct voices, F0 high -> low
+- Achernar          273.7 Hz  (22.32s)
+- Laomedeia         233.2 Hz  (16.58s)
+- Despina           220.0 Hz  (11.22s)
+- Autonoe           208.1 Hz  (10.80s)
+- Sadachbia         204.7 Hz  (6.63s)
+- Leda              203.6 Hz  (11.75s)
+- Sulafat           202.7 Hz  (22.28s)
+- Umbriel           201.9 Hz  (22.39s)
+- Callirrhoe        200.3 Hz  (11.90s)
+- Kore              199.3 Hz  (11.76s)
+- Zephyr            198.8 Hz  (10.96s)
+- Vindemiatrix      194.8 Hz  (13.08s)
+- Aoede             187.4 Hz  (10.10s)
+- Erinome           184.6 Hz  (8.44s)
+- Rasalgethi        178.8 Hz  (10.55s)
+- Schedar           166.4 Hz  (15.80s)
+- Orus              155.0 Hz  (11.08s)
+- Zubenelgenubi     144.5 Hz  (15.82s)
+- Pulcherrima       138.7 Hz  (11.26s)
+- Gacrux            133.2 Hz  (11.48s)
+- Achird            130.6 Hz  (9.08s)
+- Fenrir            128.4 Hz  (11.48s)
+- Puck              120.3 Hz  (10.91s)
+- Enceladus         119.3 Hz  (11.32s)
+- Charon            115.7 Hz  (9.75s)
+- Algieba           115.5 Hz  (11.77s)
+- Alnilam           107.5 Hz  (11.92s)
+- Sadaltager         96.9 Hz  (22.25s)
+- Algenib            75.1 Hz  (22.28s)
+
+## Poor / non-Korean output
+- none
+
+Total retries across sweep: 14

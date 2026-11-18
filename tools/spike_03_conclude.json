@@ -1,0 +1,24 @@
+[
+  {
+    "label": "HIGH+300",
+    "vad": {
+      "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
+      "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+      "silenceDurationMs": 300,
+      "prefixPaddingMs": 40
+    },
+    "end_detect_ms": 803,
+    "first_audio_ms": 1226
+  },
+  {
+    "label": "HIGH+500",
+    "vad": {
+      "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
+      "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+      "silenceDurationMs": 500,
+      "prefixPaddingMs": 40
+    },
+    "end_detect_ms": 1042,
+    "first_audio_ms": 1042
+  }
+]

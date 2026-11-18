@@ -1,0 +1,652 @@
+{
+  "model": "gemini-3.8-live",
+  "speech_ms": 1760,
+  "chunk_ms": 30,
+  "rate": 16000,
+  "probes": [
+    {
+      "label": "startOfSpeechSensitivity=START_SENSITIVITY_HIGH",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH"
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "startOfSpeechSensitivity=START_SENSITIVITY_LOW",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "startOfSpeechSensitivity": "START_SENSITIVITY_LOW"
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "endOfSpeechSensitivity=END_SENSITIVITY_HIGH",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH"
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "endOfSpeechSensitivity=END_SENSITIVITY_LOW",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "endOfSpeechSensitivity": "END_SENSITIVITY_LOW"
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "prefixPaddingMs=20",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "prefixPaddingMs": 20
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "silenceDurationMs=300",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "silenceDurationMs": 300
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "silenceDurationMs=500",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "silenceDurationMs": 500
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "silenceDurationMs=1500",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "silenceDurationMs": 1500
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "silenceDurationMs=2500",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "silenceDurationMs": 2500
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "prefixPaddingMs=-1 (negative value: range check)",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "prefixPaddingMs": -1
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "endOfSpeechSensitivity=END_SENSITIVITY_MEDIUM (bogus enum, expect reject)",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "endOfSpeechSensitivity": "END_SENSITIVITY_MEDIUM"
+          }
+        }
+      },
+      "status": "closed",
+      "error": "code=1007 reason=\"Invalid value at 'setup.realtime_input_config.automatic_activity_detection.end_of_speech_sensitivity' (type.googleapis.com/\""
+    },
+    {
+      "label": "automaticActivityDetection.disabled=true",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "disabled": true
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    },
+    {
+      "label": "all accepted fields together",
+      "cfg": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+            "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
+            "prefixPaddingMs": 20,
+            "silenceDurationMs": 500
+          }
+        }
+      },
+      "status": "accepted",
+      "error": ""
+    }
+  ],
+  "baseline": [
+    {
+      "label": "baseline_default_1",
+      "manual": false,
+      "extra": {},
+      "speech_ms": 1760,
+      "ok": true,
+      "setup_ms": 450,
+      "pacing_drift_ms": 11,
+      "mode": "autoVAD+silence",
+      "marker": "last_speech_sample",
+      "voiceActivity": [
+        {
+          "type": "ACTIVITY_START",
+          "audioOffset": "0.200s",
+          "ms": 0
+        },
+        {
+          "type": "ACTIVITY_END",
+          "audioOffset": "2.960s",
+          "ms": 1264
+        }
+      ],
+      "has_voiceActivity": true,
+      "end_detect_ms": 1264,
+      "utterance_audio_ms": 2760,
+      "detect_audio_ms": 1000,
+      "marks": [
+        {
+          "ev": "voiceActivity:ACTIVITY_START",
+          "ms": 0,
+          "audioOffset": "0.200s"
+        },
+        {
+          "ev": "voiceActivity:ACTIVITY_END",
+          "ms": 1264,
+          "audioOffset": "2.960s"
+        },
+        {
+          "ev": "first_model_audio",
+          "ms": 1268
+        },
+        {
+          "ev": "turnComplete",
+          "ms": 1996,
+          "reason": null
+        }
+      ],
+      "first_audio_ms": 1268,
+      "turn_complete_ms": 1996,
+      "first_input_tx_ms": 1264,
+      "input_text": "안녕, 오늘 날씨 어때?",
+      "turn_reason": null,
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown",
+        "voiceActivity"
+      ],
+      "detect_ms": 1264
+    },
+    {
+      "label": "baseline_default_2",
+      "manual": false,
+      "extra": {},
+      "speech_ms": 1760,
+      "ok": true,
+      "setup_ms": 490,
+      "pacing_drift_ms": 11,
+      "mode": "autoVAD+silence",
+      "marker": "last_speech_sample",
+      "voiceActivity": [
+        {
+          "type": "ACTIVITY_START",
+          "audioOffset": "0.200s",
+          "ms": 0
+        },
+        {
+          "type": "ACTIVITY_END",
+          "audioOffset": "2.960s",
+          "ms": 1264
+        }
+      ],
+      "has_voiceActivity": true,
+      "end_detect_ms": 1264,
+      "utterance_audio_ms": 2760,
+      "detect_audio_ms": 1000,
+      "marks": [
+        {
+          "ev": "voiceActivity:ACTIVITY_START",
+          "ms": 0,
+          "audioOffset": "0.200s"
+        },
+        {
+          "ev": "voiceActivity:ACTIVITY_END",
+          "ms": 1264,
+          "audioOffset": "2.960s"
+        },
+        {
+          "ev": "first_model_audio",
+          "ms": 1264
+        },
+        {
+          "ev": "turnComplete",
+          "ms": 2042,
+          "reason": null
+        }
+      ],
+      "first_audio_ms": 1264,
+      "turn_complete_ms": 2042,
+      "first_input_tx_ms": 1264,
+      "input_text": "안녕, 오늘 날씨 어때?",
+      "turn_reason": null,
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown",
+        "voiceActivity"
+      ],
+      "detect_ms": 1264
+    }
+  ],
+  "variants": [
+    {
+      "label": "END_SENSITIVITY_HIGH_silence300",
+      "manual": false,
+      "extra": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+            "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
+            "prefixPaddingMs": 20,
+            "silenceDurationMs": 300
+          }
+        }
+      },
+      "speech_ms": 1760,
+      "ok": true,
+      "setup_ms": 535,
+      "pacing_drift_ms": 11,
+      "mode": "autoVAD+silence",
+      "marker": "last_speech_sample",
+      "voiceActivity": [
+        {
+          "type": "ACTIVITY_START",
+          "audioOffset": "0.200s",
+          "ms": 0
+        },
+        {
+          "type": "ACTIVITY_END",
+          "audioOffset": "2.280s",
+          "ms": 608
+        }
+      ],
+      "has_voiceActivity": true,
+      "end_detect_ms": 608,
+      "utterance_audio_ms": 2080,
+      "detect_audio_ms": 320,
+      "marks": [
+        {
+          "ev": "voiceActivity:ACTIVITY_START",
+          "ms": 0,
+          "audioOffset": "0.200s"
+        },
+        {
+          "ev": "voiceActivity:ACTIVITY_END",
+          "ms": 608,
+          "audioOffset": "2.280s"
+        },
+        {
+          "ev": "first_model_audio",
+          "ms": 608
+        },
+        {
+          "ev": "turnComplete",
+          "ms": 1461,
+          "reason": null
+        }
+      ],
+      "first_audio_ms": 608,
+      "turn_complete_ms": 1461,
+      "first_input_tx_ms": 608,
+      "input_text": "안녕, 오늘 날씨 어때?",
+      "turn_reason": null,
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown",
+        "voiceActivity"
+      ],
+      "detect_ms": 608
+    },
+    {
+      "label": "END_SENSITIVITY_LOW_silence1500",
+      "manual": false,
+      "extra": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+            "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
+            "prefixPaddingMs": 20,
+            "silenceDurationMs": 1500
+          }
+        }
+      },
+      "speech_ms": 1760,
+      "ok": true,
+      "setup_ms": 493,
+      "pacing_drift_ms": 11,
+      "mode": "autoVAD+silence",
+      "marker": "last_speech_sample",
+      "voiceActivity": [
+        {
+          "type": "ACTIVITY_START",
+          "audioOffset": "0.200s",
+          "ms": 0
+        },
+        {
+          "type": "ACTIVITY_END",
+          "audioOffset": "3.680s",
+          "ms": 2100
+        }
+      ],
+      "has_voiceActivity": true,
+      "end_detect_ms": 2100,
+      "utterance_audio_ms": 3480,
+      "detect_audio_ms": 1720,
+      "marks": [
+        {
+          "ev": "voiceActivity:ACTIVITY_START",
+          "ms": 0,
+          "audioOffset": "0.200s"
+        },
+        {
+          "ev": "voiceActivity:ACTIVITY_END",
+          "ms": 2100,
+          "audioOffset": "3.680s"
+        },
+        {
+          "ev": "first_model_audio",
+          "ms": 2102
+        },
+        {
+          "ev": "turnComplete",
+          "ms": 2843,
+          "reason": null
+        }
+      ],
+      "first_audio_ms": 2102,
+      "turn_complete_ms": 2843,
+      "first_input_tx_ms": 2100,
+      "input_text": "안녕, 오늘 날씨 어때?",
+      "turn_reason": null,
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown",
+        "voiceActivity"
+      ],
+      "detect_ms": 2100
+    },
+    {
+      "label": "END_SENSITIVITY_LOW_silence500_default",
+      "manual": false,
+      "extra": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
+            "silenceDurationMs": 500
+          }
+        }
+      },
+      "speech_ms": 1760,
+      "ok": true,
+      "setup_ms": 511,
+      "pacing_drift_ms": 11,
+      "mode": "autoVAD+silence",
+      "marker": "last_speech_sample",
+      "voiceActivity": [
+        {
+          "type": "ACTIVITY_START",
+          "audioOffset": "0.200s",
+          "ms": 0
+        },
+        {
+          "type": "ACTIVITY_END",
+          "audioOffset": "2.680s",
+          "ms": 1128
+        }
+      ],
+      "has_voiceActivity": true,
+      "end_detect_ms": 1128,
+      "utterance_audio_ms": 2480,
+      "detect_audio_ms": 720,
+      "marks": [
+        {
+          "ev": "voiceActivity:ACTIVITY_START",
+          "ms": 0,
+          "audioOffset": "0.200s"
+        },
+        {
+          "ev": "voiceActivity:ACTIVITY_END",
+          "ms": 1128,
+          "audioOffset": "2.680s"
+        },
+        {
+          "ev": "first_model_audio",
+          "ms": 1128
+        },
+        {
+          "ev": "turnComplete",
+          "ms": 1863,
+          "reason": null
+        }
+      ],
+      "first_audio_ms": 1128,
+      "turn_complete_ms": 1863,
+      "first_input_tx_ms": 1128,
+      "input_text": "안녕, 오늘 날씨 어때?",
+      "turn_reason": null,
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown",
+        "voiceActivity"
+      ],
+      "detect_ms": 1128
+    },
+    {
+      "label": "END_SENSITIVITY_LOW_silence2500",
+      "manual": false,
+      "extra": {
+        "realtimeInputConfig": {
+          "automaticActivityDetection": {
+            "endOfSpeechSensitivity": "END_SENSITIVITY_LOW",
+            "silenceDurationMs": 2500
+          }
+        }
+      },
+      "speech_ms": 1760,
+      "ok": true,
+      "setup_ms": 533,
+      "pacing_drift_ms": 11,
+      "mode": "autoVAD+silence",
+      "marker": "last_speech_sample",
+      "voiceActivity": [
+        {
+          "type": "ACTIVITY_START",
+          "audioOffset": "0.200s",
+          "ms": 0
+        },
+        {
+          "type": "ACTIVITY_END",
+          "audioOffset": "4.680s",
+          "ms": 3110
+        }
+      ],
+      "has_voiceActivity": true,
+      "end_detect_ms": 3110,
+      "utterance_audio_ms": 4480,
+      "detect_audio_ms": 2720,
+      "marks": [
+        {
+          "ev": "voiceActivity:ACTIVITY_START",
+          "ms": 0,
+          "audioOffset": "0.200s"
+        },
+        {
+          "ev": "voiceActivity:ACTIVITY_END",
+          "ms": 3110,
+          "audioOffset": "4.680s"
+        },
+        {
+          "ev": "first_model_audio",
+          "ms": 3110
+        },
+        {
+          "ev": "turnComplete",
+          "ms": 3806,
+          "reason": null
+        }
+      ],
+      "first_audio_ms": 3110,
+      "turn_complete_ms": 3806,
+      "first_input_tx_ms": 3110,
+      "input_text": "안녕, 오늘 날씨 어때?",
+      "turn_reason": null,
+      "kinds": [
+        "serverContent",
+        "sessionResumptionUpdate",
+        "setupComplete",
+        "unknown",
+        "voiceActivity"
+      ],
+      "detect_ms": 3110
+    }
+  ],
+  "manual": {
+    "label": "manual_disabled",
+    "manual": true,
+    "extra": {
+      "realtimeInputConfig": {
+        "automaticActivityDetection": {
+          "disabled": true
+        }
+      }
+    },
+    "speech_ms": 1760,
+    "ok": true,
+    "setup_ms": 516,
+    "pacing_drift_ms": 10,
+    "mode": "activityEnd",
+    "marker": "activityEnd_sent",
+    "voiceActivity": [
+      {
+        "type": "ACTIVITY_START",
+        "audioOffset": "0s",
+        "ms": 0
+      },
+      {
+        "type": "ACTIVITY_END",
+        "audioOffset": "1.760s",
+        "ms": 184
+      }
+    ],
+    "has_voiceActivity": true,
+    "end_detect_ms": 184,
+    "utterance_audio_ms": 1760,
+    "detect_audio_ms": 0,
+    "marks": [
+      {
+        "ev": "voiceActivity:ACTIVITY_START",
+        "ms": 0,
+        "audioOffset": "0s"
+      },
+      {
+        "ev": "voiceActivity:ACTIVITY_END",
+        "ms": 184,
+        "audioOffset": "1.760s"
+      },
+      {
+        "ev": "first_model_audio",
+        "ms": 581
+      },
+      {
+        "ev": "turnComplete",
+        "ms": 1267,
+        "reason": null
+      }
+    ],
+    "first_audio_ms": 581,
+    "turn_complete_ms": 1267,
+    "first_input_tx_ms": 184,
+    "input_text": "안녕, 오늘 날씨 어때?",
+    "turn_reason": null,
+    "kinds": [
+      "serverContent",
+      "sessionResumptionUpdate",
+      "setupComplete",
+      "unknown",
+      "voiceActivity"
+    ],
+    "detect_ms": 184
+  },
+  "derived": {
+    "detect_metric": "voiceActivity ACTIVITY_END wall-clock ms after last speech sample",
+    "manual_ttfb_ms": 581,
+    "baseline_detect_avg_ms": 1264,
+    "high300_detect_ms": 608,
+    "low1500_detect_ms": 2100,
+    "low2500_detect_ms": 3110,
+    "low_minus_high_ms": 1492,
+    "voiceActivity_events_seen": true
+  },
+  "table_md": "| variant | fields accepted | end-detection delay ms | notes |\n| --- | --- | --- | --- |\n| baseline_default_1 | none sent (defaults) | 1264 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=1000 ms (utterance_audio=2760 ms - speech 1760 ms); turnComplete=1996 ms; first_audio=1268 ms |\n| baseline_default_2 | none sent (defaults) | 1264 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=1000 ms (utterance_audio=2760 ms - speech 1760 ms); turnComplete=2042 ms; first_audio=1264 ms |\n| END_SENSITIVITY_HIGH_silence300 | startOfSpeechSensitivity=START_SENSITIVITY_HIGH, endOfSpeechSensitivity=END_SENSITIVITY_HIGH, prefixPaddingMs=20, silenceDurationMs=300 | 608 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=320 ms (utterance_audio=2080 ms - speech 1760 ms); turnComplete=1461 ms; first_audio=608 ms |\n| END_SENSITIVITY_LOW_silence1500 | startOfSpeechSensitivity=START_SENSITIVITY_HIGH, endOfSpeechSensitivity=END_SENSITIVITY_LOW, prefixPaddingMs=20, silenceDurationMs=1500 | 2100 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=1720 ms (utterance_audio=3480 ms - speech 1760 ms); turnComplete=2843 ms; first_audio=2102 ms |\n| END_SENSITIVITY_LOW_silence500_default | endOfSpeechSensitivity=END_SENSITIVITY_LOW, silenceDurationMs=500 | 1128 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=720 ms (utterance_audio=2480 ms - speech 1760 ms); turnComplete=1863 ms; first_audio=1128 ms |\n| END_SENSITIVITY_LOW_silence2500 | endOfSpeechSensitivity=END_SENSITIVITY_LOW, silenceDurationMs=2500 | 3110 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=2720 ms (utterance_audio=4480 ms - speech 1760 ms); turnComplete=3806 ms; first_audio=3110 ms |\n| manual_disabled | disabled=true + activityEnd | 184 | heard '안녕, 오늘 날씨 어때?'; silence it actually counted=0 ms (utterance_audio=1760 ms - speech 1760 ms); turnComplete=1267 ms; first_audio=581 ms; activityEnd -> response with NO silence wait |",
+  "retries": {
+    "retries": 0,
+    "events": []
+  },
+  "elapsed_s": 38.9
+}
