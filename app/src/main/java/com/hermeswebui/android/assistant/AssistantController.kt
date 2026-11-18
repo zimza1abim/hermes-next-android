@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Network
 import android.os.Handler
 import android.os.Looper
+import com.hermeswebui.android.assistant.voice.VoiceTurn
 import com.hermeswebui.android.data.SettingsRepository
 import com.hermeswebui.android.webapp.MonitorEndpoint
 import com.hermeswebui.android.webapp.SignInGate
@@ -33,6 +34,9 @@ class AssistantController private constructor(private val context: Context, priv
     private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
     /** The unsent text, kept while the panel is closed and across an app restart. */
     val draft = MutableStateFlow(prefs.getString(KEY_DRAFT, "").orEmpty())
+
+    /** Voice calls waiting for a turn's answer, keyed by the turn's id (= the call's submission id). */
+    private val voiceTurns = com.hermeswebui.android.assistant.voice.VoiceTurnRegistry()
     val mode = MutableStateFlow(AssistantMode.ASK)
     /** The models starred in Hermes, refreshed on every open; kept so the chip shows at once. */
     val favourites = MutableStateFlow(prefs.getString(KEY_FAVOURITES, "").orEmpty().split('\n').mapNotNull(AssistantModel::parse))
@@ -175,6 +179,82 @@ class AssistantController private constructor(private val context: Context, priv
     private fun trimImages() {
         val used = pendingImages.value.toSet() + _state.value.turns.flatMap { it.images }
         images.keys.retainAll(used)
+    }
+
+    /**
+     * Asks a question on behalf of a voice call and hands the answer back through [onDone].
+     *
+     * The turn is an ordinary chat turn with `surface: "voice-live"`, so the question and answer stay in
+     * the conversation and the server can answer for speaking. [submissionId] is the caller's identity
+     * for the turn (the voice call's function-call id), which is what pairs an answer with its question.
+     */
+    fun askVoice(question: String, submissionId: String, onDone: (VoiceTurn) -> Unit) {
+        voiceTurns.expect(submissionId, onDone)
+        dispatch(AssistantInput.Ask(
+            id = submissionId,
+            mode = AssistantMode.ASK,
+            question = question,
+            prompt = question,
+            surface = com.hermeswebui.android.assistant.voice.HermesHandOff.SURFACE,
+        ))
+        settleVoiceWaiters()
+    }
+
+    /** Called on every state change: answers the voice call for a turn that finished. */
+    private fun settleVoiceWaiters() {
+        if (voiceTurns.size == 0) return
+        val finished = _state.value.turns.filter {
+            it.status == TurnStatus.DONE || it.status == TurnStatus.FAILED || it.status == TurnStatus.STOPPED
+        }
+        // take() removes only the id it is given: one turn's answer can never be delivered to another's call.
+        val due = finished.mapNotNull { turn -> voiceTurns.take(turn.id)?.let { turn to it } }
+        due.forEach { (turn, done) ->
+            when (turn.status) {
+                TurnStatus.DONE -> done(VoiceTurn(turn.answer, null))
+                TurnStatus.STOPPED -> done(VoiceTurn(null, "사용자가 멈췄어요"))
+                else -> done(VoiceTurn(null, turn.error ?: "Hermes가 답하지 못했어요"))
+            }
+        }
+    }
+
+    /** SOUL.md를 서버에서 다시 읽는다(읽기 전용). 통화 화면이 열릴 때 부른다. */
+    fun refreshSoul() = dispatch(AssistantInput.RefreshSoul(state.value.profile))
+
+    /** 서버의 SOUL.md 본문. 없으면 빈 문자열. 화면에는 절대 그리지 않는다. */
+    fun soulText(): String = state.value.souls[state.value.profile ?: ""] ?: ""
+
+    /** The call's live lines, in the conversation, as they are spoken. Display only. */
+    private val voiceEcho = mutableListOf<String>()
+
+    /** One spoken line, shown at once: the same transcript the call screen is already drawing. */
+    fun appendVoiceLine(me: Boolean, text: String) {
+        if (text.isBlank()) return
+        val id = "voice-echo-" + UUID.randomUUID()
+        voiceEcho += id
+        dispatch(AssistantInput.VoiceEcho(id, me, text))
+    }
+
+    /**
+     * Leaves the call in a session.
+     *
+     * A local note is not a session: it lives only in the app's memory, so a refresh showed nothing and
+     * the call was nowhere. The transcript is submitted as an ordinary turn (surface `voice-live`), so
+     * the server stores it, the sidebar lists it, and it is still there after a restart.
+     */
+    fun recordVoiceCall(text: String) {
+        if (text.isBlank()) return
+        // The live lines were a preview of this record: they go, so the call appears once.
+        if (voiceEcho.isNotEmpty()) {
+            dispatch(AssistantInput.ClearVoiceEcho(voiceEcho.toList()))
+            voiceEcho.clear()
+        }
+        dispatch(AssistantInput.Ask(
+            id = UUID.randomUUID().toString(),
+            mode = AssistantMode.ASK,
+            question = text,
+            prompt = text,
+            surface = com.hermeswebui.android.assistant.voice.HermesHandOff.SURFACE,
+        ))
     }
 
     fun stop() = dispatch(AssistantInput.Stop)
@@ -452,6 +532,7 @@ class AssistantController private constructor(private val context: Context, priv
             rememberLastLine()
             syncRunning()
             refreshFavouritesWhenReady()
+            settleVoiceWaiters()
         } finally {
             dispatching = false
         }

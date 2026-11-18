@@ -56,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
@@ -168,6 +169,8 @@ internal class AssistantActions(
     val loadImage: ImageLoader? = null,
     /** Saves an image to the gallery; null offers no save button. */
     val saveImage: ImageSaver? = null,
+    /** Starts a voice call in this conversation; null offers no voice button. */
+    val onVoice: (() -> Unit)? = null,
 )
 
 @Composable
@@ -1253,6 +1256,26 @@ private fun InputPill(
                     .clickable(role = Role.Button, onClick = actions.onStop).semantics { contentDescription = "답변 중지" },
                 contentAlignment = Alignment.Center,
             ) { Box(Modifier.size(13.dp).clip(RoundedCornerShape(3.dp)).background(Rose.Deep)) }
+        } else if (!enabled && actions.onVoice != null) {
+            // An empty field offers the call instead of an empty send: the plan's waveform button.
+            val onVoice = actions.onVoice!!
+            val press = remember { MutableInteractionSource() }
+            val pressed by press.collectIsPressedAsState()
+            val scale by animateFloatAsState(if (pressed) 0.94f else 1f, tween(140), label = "voice")
+            Box(
+                Modifier.size(44.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape)
+                    .background(Rose.Soft)
+                    .clickable(interactionSource = press, indication = null, role = Role.Button) {
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        keyboard?.hide()
+                        focus.clearFocus()
+                        onVoice()
+                    }
+                    .semantics { contentDescription = "음성으로 대화" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.Mic, null, tint = Rose.Deep, modifier = Modifier.size(22.dp))
+            }
         } else {
             val press = remember { MutableInteractionSource() }
             val pressed by press.collectIsPressedAsState()

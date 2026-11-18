@@ -12,9 +12,14 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.core.content.FileProvider
 import com.hermeswebui.android.MainActivity
+import com.hermeswebui.android.assistant.voice.CallBarHost
+import com.hermeswebui.android.assistant.voice.VoiceActivity
+import com.hermeswebui.android.assistant.voice.VoiceSettingsActivity
 import com.hermeswebui.android.background.HermesKeepAliveService
 import java.io.File
 
@@ -80,7 +85,8 @@ class ChatActivity : ComponentActivity() {
             val mcpCatalog by admin.mcpCatalog.collectAsState()
             val installing by admin.installing.collectAsState()
             val archived by admin.archived.collectAsState()
-            ChatScreen(
+            Box {
+                ChatScreen(
                 state = state,
                 draft = draft,
                 mode = mode,
@@ -93,7 +99,10 @@ class ChatActivity : ComponentActivity() {
                 menu = MenuView(fontList, cron, skills, toolsets, mcp, plugins, mcpCatalog, installing, archived, notice, nativeHome.value,
                     capabilitiesOf = "@" + (state.profiles.firstOrNull { if (tabProfile == null) it.own else it.name == tabProfile }?.title ?: tabProfile ?: "메인 봇")),
                 menuActions = menuActions,
-            )
+                )
+                // A running call is visible from the conversation it was started in, and one tap returns.
+                CallBarHost(modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter))
+            }
         }
     }
 
@@ -136,6 +145,7 @@ class ChatActivity : ComponentActivity() {
                 controller.refreshChats()
                 controller.refreshProfiles()
             },
+            onVoice = { VoiceActivity.start(this, controller.state.value.profile) },
             onMenu = { pane.value = Pane.MENU },
             onExit = ::finish,
         )
@@ -215,6 +225,11 @@ class ChatActivity : ComponentActivity() {
                 startActivity(com.hermeswebui.android.launcher.AppShortcuts.settingsIntent(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },
             onWebapp = ::openApp,
+            onVoiceSettings = { startActivity(android.content.Intent(this, VoiceSettingsActivity::class.java)) },
+            onRefreshChats = {
+                controller.refreshChats()
+                controller.refreshProfiles()
+            },
             onNativeHome = { on ->
                 NativeHome.set(this, on)
                 nativeHome.value = on
@@ -267,6 +282,7 @@ class ChatActivity : ComponentActivity() {
             loadImage = controller::loadImage,
             saveImage = controller::saveImage,
             onSlash = controller::loadSlash,
+            onVoice = { VoiceActivity.start(this, controller.state.value.profile) },
         )
     }
 

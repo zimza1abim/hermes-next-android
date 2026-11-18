@@ -16,6 +16,17 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+    <!-- 통화 화면: 띠로 접히는 동안 뒤의 채팅이 보여야 해서 창이 반투명하다. -->
+    <style name="Theme.HermesVoice" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
     <style name="Theme.HermesChats" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:windowBackground">@color/hermes_chats_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

@@ -2,6 +2,7 @@ package com.hermeswebui.android.assistant
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -49,12 +50,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
@@ -70,8 +73,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -114,6 +120,8 @@ internal class ChatsActions(
     val onBackToList: () -> Unit,
     val onRefresh: () -> Unit,
     val onMenu: () -> Unit,
+    /** Starts a voice call from the list header. */
+    val onVoice: () -> Unit,
     val onExit: () -> Unit,
 )
 
@@ -164,6 +172,50 @@ internal fun ChatScreen(
     }
 }
 
+/** The header's action rail: one hairline capsule, one filled primary, two quiet buttons. */
+@Composable
+private fun HeaderRail(onVoice: () -> Unit, onNew: () -> Unit, onMenu: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(24.dp)).background(Rose.Field)
+            .border(1.dp, Rose.Border, RoundedCornerShape(24.dp)).padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        RailAction(Icons.Rounded.Mic, "음성 대화 시작", primary = true, onClick = onVoice)
+        RailAction(Icons.Rounded.Add, "새 대화", onClick = onNew)
+        RailAction(Icons.Rounded.Menu, "메뉴", onClick = onMenu)
+    }
+}
+
+@Composable
+private fun RailAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String,
+                       primary: Boolean = false, onClick: () -> Unit) {
+    val press = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.9f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 900f),
+        label = "railPress",
+    )
+    // The circle is 36dp, the touch target is the platform's 48dp: the rail stays quiet, the thumb
+    // still hits it.
+    Box(
+        Modifier.size(48.dp).clickable(interactionSource = press, indication = null,
+            role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(36.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape)
+                .background(if (primary) Rose.Deep else Rose.Field),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = if (primary) androidx.compose.ui.graphics.Color.White else Rose.Deep,
+                modifier = Modifier.size(if (primary) 19.dp else 18.dp))
+        }
+    }
+}
+
 @Composable
 private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantActions, view: ChatsView, chats: ChatsActions) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -178,12 +230,14 @@ private fun ColumnScope.ListPane(state: AssistantState, actions: AssistantAction
                 Text(label, style = RoseType.Meta, maxLines = 1, modifier = Modifier.padding(start = 6.dp))
             }
         }
-        // The main action first, then the two that are used less; the menu sits at the edge, where menus are.
-        RoundIcon(Icons.Rounded.Add, "새 대화", primary = true, onClick = chats.onNew)
-        Spacer(Modifier.width(6.dp))
-        RoundIcon(Icons.Rounded.Refresh, "목록 새로 고침", filled = true, onClick = chats.onRefresh)
-        Spacer(Modifier.width(4.dp))
-        RoundIcon(Icons.Rounded.Menu, "메뉴", filled = true, onClick = chats.onMenu)
+        // One toolbar instead of four competing circles: the call is the only filled action, the two
+        // that open something sit beside it in the same glass rail. Refresh moved into the menu, where
+        // a maintenance action belongs.
+        HeaderRail(
+            onVoice = chats.onVoice,
+            onNew = chats.onNew,
+            onMenu = chats.onMenu,
+        )
     }
     // General chats and each bot's chats are separate lists. Bots come from the server's roster, or,
     // until it is read, from the profiles the chats themselves name.

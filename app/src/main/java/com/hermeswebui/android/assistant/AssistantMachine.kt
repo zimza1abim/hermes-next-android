@@ -117,6 +117,11 @@ data class AssistantTurn(
      * prompt to send, or for an ordinary question.
      */
     val command: Boolean = false,
+    /**
+     * How the question reached Hermes (`voice-live` for a call). Sent with the prompt so the server can
+     * answer for speaking instead of reading.
+     */
+    val surface: String? = null,
 ) {
     val answer: String get() = final ?: segments.toSortedMap().values.joinToString("\n\n")
 }
@@ -133,6 +138,8 @@ sealed interface PendingCall {
     data class Attach(val turnId: String, val imageId: String) : PendingCall
     data object Interrupt : PendingCall
     data object Profiles : PendingCall
+    /** `profiles.describe`: SOUL.md 읽기 전용 조회. */
+    data class Soul(val profile: String?) : PendingCall
     data class Avatar(val profile: String) : PendingCall
     data class Catalog(val profile: String?) : PendingCall
     /** `command.dispatch` for a slash turn; [hops] counts alias redirects. */
@@ -182,6 +189,10 @@ data class AssistantState(
     /** The bot whose chats are shown and whose chat is open; null is the server's own profile. */
     val profile: String? = null,
     val profilesDue: Boolean = false,
+    /** SOUL.md 본문, 프로필 이름별. 앱은 화면에 절대 그리지 않는다. */
+    val souls: Map<String, String> = emptyMap(),
+    /** 조회가 예약된 프로필: null이면 예약 없음, ""는 서버의 기본 프로필. */
+    val soulDue: String? = null,
     /** The list id the open chat was picked by; the server may answer with another durable id. */
     val openedId: String? = null,
     val slash: SlashCatalog = SlashCatalog(),
@@ -193,7 +204,8 @@ data class AssistantState(
     val activeTurn: AssistantTurn? get() = turns.lastOrNull { it.status.active }
 
     /** The socket is wanted while the panel is shown or a turn still runs. */
-    val wanted: Boolean get() = shown || profilesDue || opening || turns.any { it.status.active || it.status == TurnStatus.QUEUED }
+    val wanted: Boolean get() = shown || profilesDue || soulDue != null || opening ||
+        turns.any { it.status.active || it.status == TurnStatus.QUEUED }
 
     val busy: Boolean get() = turns.any { it.status.active || it.status == TurnStatus.QUEUED }
 
@@ -213,8 +225,21 @@ sealed interface AssistantInput {
         val prompt: String,
         val images: List<String> = emptyList(),
         val setup: ChatSetup = ChatSetup(),
+        /** `voice-live` when the question comes from a call; null for typed questions. */
+        val surface: String? = null,
     ) : AssistantInput
     data object Stop : AssistantInput
+    /**
+     * One spoken line of a live call, shown in the conversation as it happens.
+     *
+     * It is display only: nothing is sent, so a conversation of twenty exchanges does not become twenty
+     * turns on the server. The finished call is submitted once, at the end.
+     */
+    data class VoiceEcho(val id: String, val me: Boolean, val text: String) : AssistantInput
+    /** The call's echoed lines are replaced by its one submitted record. */
+    data class ClearVoiceEcho(val ids: List<String>) : AssistantInput
+    /** SOUL.md를 다시 읽어 온다(서버에서 바뀌었을 수 있으니 통화 시작 때마다). */
+    data class RefreshSoul(val profile: String?) : AssistantInput
     /** Asks a failed or stopped question again, as a new turn [newId] in its place. */
     data class Again(val turnId: String, val newId: String) : AssistantInput
     /** Starts a new chat; ignored while a turn runs. */
@@ -292,10 +317,23 @@ object AssistantMachine {
             val text = input.question.trim()
             if ((text.isEmpty() && input.images.isEmpty()) || state.turns.any { it.id == input.id }) state to emptyList()
             else state.copy(turns = (state.turns + AssistantTurn(input.id, input.mode, text, input.prompt, images = input.images, setup = input.setup,
-                command = input.mode == AssistantMode.ASK && input.images.isEmpty() && SlashCommand.parse(text) != null))
+                command = input.mode == AssistantMode.ASK && input.images.isEmpty() && SlashCommand.parse(text) != null,
+                surface = input.surface))
                 .takeLast(MAX_TURNS)) to emptyList()
         }
         AssistantInput.Stop -> stop(state)
+        is AssistantInput.VoiceEcho -> if (input.text.isBlank()) state to emptyList()
+            else state.copy(turns = (state.turns + AssistantTurn(
+                id = input.id,
+                mode = AssistantMode.ASK,
+                question = if (input.me) input.text else "",
+                prompt = "",
+                status = TurnStatus.DONE,
+                final = if (input.me) null else input.text,
+            )).takeLast(MAX_TURNS)) to emptyList()
+        is AssistantInput.ClearVoiceEcho -> state.copy(
+            turns = state.turns.filterNot { it.id in input.ids },
+        ) to emptyList()
         is AssistantInput.Again -> {
             val old = state.turns.firstOrNull { it.id == input.turnId && (it.status == TurnStatus.FAILED || it.status == TurnStatus.STOPPED) }
             if (old == null || state.turns.any { it.id == input.newId }) state to emptyList()
@@ -310,6 +348,7 @@ object AssistantMachine {
             else state.copy(runtimeId = null, storedId = null, turns = emptyList(), requests = emptyList(),
                 history = emptyList(), opening = false, title = null, openedId = null) to emptyList()
         AssistantInput.RefreshProfiles -> state.copy(profilesDue = true) to emptyList()
+        is AssistantInput.RefreshSoul -> state.copy(soulDue = input.profile ?: "") to emptyList()
         is AssistantInput.SelectProfile -> if (state.busy && !(input.leave && state.leavable)) state to emptyList()
             else state.copy(profile = input.name?.takeIf { it.isNotBlank() }, runtimeId = null, storedId = null, turns = emptyList(),
                 requests = emptyList(), history = emptyList(), opening = false, title = null, openedId = null,
@@ -373,6 +412,19 @@ object AssistantMachine {
             val id = state.nextId
             return flush(state.copy(profilesDue = false, nextId = id + 1, calls = state.calls + (id to PendingCall.Profiles))).let { (flushed, sends) ->
                 flushed to (listOf(AssistantEffect.Send(state.gen, AssistantProtocol.listProfiles(id))) + sends)
+            }
+        }
+        // SOUL.md: 읽기 전용. 기본 프로필은 이름이 필요해서 목록에서 찾아 쓴다.
+        val soulDue = state.soulDue
+        if (soulDue != null) {
+            val profile = soulDue.takeIf { it.isNotEmpty() }
+            val name = profile ?: state.profiles.firstOrNull { it.own }?.name
+            if (name.isNullOrBlank()) return state.copy(soulDue = null) to emptyList()
+            val id = state.nextId
+            return flush(
+                state.copy(soulDue = null, nextId = id + 1, calls = state.calls + (id to PendingCall.Soul(profile))),
+            ).let { (flushed, sends) ->
+                flushed to (listOf(AssistantEffect.Send(state.gen, AssistantProtocol.describeProfile(id, profile, name))) + sends)
             }
         }
         if (state.slash.due) {
@@ -465,7 +517,7 @@ object AssistantMachine {
             calls = state.calls + (id to PendingCall.Submit(turn.id, identity)),
             turns = state.turns.update(turn.id) { it.copy(status = TurnStatus.SENDING, error = null, prompt = turn.prompt, command = turn.command) },
         ) to listOf(AssistantEffect.Send(state.gen, AssistantProtocol.submit(id, sessionId, turn.prompt, turn.id.takeIf { identity },
-            turn.images.mapNotNull { turn.attached[it] }, state.profile)))
+            turn.images.mapNotNull { turn.attached[it] }, state.profile, turn.surface)))
     }
 
     private fun stop(state: AssistantState): Pair<AssistantState, List<AssistantEffect>> {
@@ -584,6 +636,7 @@ object AssistantMachine {
                     ids.zip(wanted) { id, row -> AssistantEffect.Send(state.gen, AssistantProtocol.avatar(id, row.name)) }
             }
             is PendingCall.Avatar -> base to listOfNotNull(frame.asset?.let { AssistantEffect.Avatar(call.profile, it) })
+            is PendingCall.Soul -> base.copy(souls = base.souls + ((call.profile ?: "") to (frame.soul ?: ""))) to emptyList()
             PendingCall.Create -> if (frame.ok && frame.sessionId != null) base.copy(runtimeId = frame.sessionId, storedId = frame.storedId) to emptyList()
                 else base.copy(turns = base.turns.map {
                     if (it.status == TurnStatus.QUEUED) it.copy(status = TurnStatus.FAILED, error = frame.errorMessage ?: "새 대화를 만들지 못했어요") else it
@@ -674,6 +727,7 @@ object AssistantMachine {
             runtimeId = null,
             requests = emptyList(),
             profilesDue = state.profilesDue || state.calls.values.any { it == PendingCall.Profiles },
+            soulDue = state.soulDue,
             slash = if (state.slash.loading) state.slash.copy(loading = false, due = true) else state.slash,
             // A photo staged on the old socket's session is uploaded again with the question.
             turns = state.turns.map {

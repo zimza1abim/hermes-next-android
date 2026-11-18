@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -100,6 +101,10 @@ internal class MenuActions(
     val onRefresh: (Pane) -> Unit,
     val onAppSettings: () -> Unit,
     val onWebapp: () -> Unit,
+    /** Opens the voice-call settings (key, voice, tone). */
+    val onVoiceSettings: () -> Unit,
+    /** Re-reads the chat list; the header no longer carries a refresh button of its own. */
+    val onRefreshChats: () -> Unit,
     val onNativeHome: (Boolean) -> Unit,
     val onNoticeShown: () -> Unit,
 )
@@ -115,8 +120,10 @@ internal fun ColumnScope.MenuPanes(pane: Pane, view: MenuView, actions: MenuActi
                 item { MenuRow(Icons.Rounded.Extension, "스킬 · 도구 · MCP", "${view.capabilitiesOf}에 켜져 있는 것들") { actions.onPane(Pane.CAPABILITIES) } }
                 item { MenuRow(Icons.Rounded.Download, "플러그인 · MCP 설치", "Hermes 카탈로그에서 골라 설치해요") { actions.onPane(Pane.INSTALL) } }
                 item { MenuRow(Icons.Rounded.Archive, "보관한 대화", "보관한 대화를 보고 다시 꺼내요") { actions.onPane(Pane.ARCHIVE) } }
+                item { MenuRow(Icons.Rounded.Refresh, "대화 목록 새로 고침", "서버에서 목록과 봇 목록을 다시 읽어요", onClick = actions.onRefreshChats) }
                 item { SectionTitle("앱", null, Modifier.padding(start = 12.dp, top = 16.dp, bottom = 4.dp)) }
                 item { MenuRow(Icons.Rounded.TextFields, "글꼴", HermesFonts.pickedLabel(LocalContext.current) ?: "휴대폰 기본 글꼴") { actions.onPane(Pane.FONT) } }
+                item { MenuRow(Icons.Rounded.Mic, "음성 대화", "목소리·말투, Gemini 키, Hermes에게 넘기기", onClick = actions.onVoiceSettings) }
                 item { MenuRow(Icons.Rounded.Notifications, "알림 · 앱 설정", "알림 종류, 미리보기, 배터리, 서버 주소", onClick = actions.onAppSettings) }
                 item { MenuRow(Icons.Rounded.Language, "Webapp 열기", "로그인과 나머지 기능은 Webapp 화면에서", onClick = actions.onWebapp) }
                 item {

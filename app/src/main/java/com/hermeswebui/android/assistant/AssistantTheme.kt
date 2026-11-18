@@ -94,7 +94,7 @@ internal fun PixelHeart(width: Dp, modifier: Modifier = Modifier) {
 
 /** The faint dot grid at the top of the panel, fading out downwards. */
 @Composable
-internal fun DotGrid(modifier: Modifier = Modifier, spacing: Dp = 11.dp) {
+internal fun DotGrid(modifier: Modifier = Modifier, spacing: Dp = 11.dp, color: Color = Rose.Dots) {
     Canvas(modifier) {
         val step = spacing.toPx()
         val radius = 1.1.dp.toPx()
@@ -103,7 +103,7 @@ internal fun DotGrid(modifier: Modifier = Modifier, spacing: Dp = 11.dp) {
             val alpha = (1f - y / size.height).coerceIn(0f, 1f)
             var x = step / 2
             while (x < size.width) {
-                drawCircle(Rose.Dots.copy(alpha = alpha), radius, Offset(x, y))
+                drawCircle(color.copy(alpha = color.alpha * alpha), radius, Offset(x, y))
                 x += step
             }
             y += step

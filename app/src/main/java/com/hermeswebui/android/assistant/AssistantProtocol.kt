@@ -22,6 +22,8 @@ sealed interface AssistantFrame {
         val sessionId: String? = null,
         val storedId: String? = null,
         val running: Boolean? = null,
+        /** `profiles.describe`의 SOUL.md 본문. 앱은 읽기만 한다. */
+        val soul: String? = null,
         /** The newest assistant text of a transcript reply, and the user text it answered. */
         val lastAnswer: String? = null,
         val lastQuestion: String? = null,
@@ -87,10 +89,11 @@ object AssistantProtocol {
      * them queued on the session from `image.attach_bytes` and its replies carry no type, so none are named.
      */
     fun submit(id: Int, sessionId: String, text: String, submissionId: String?, images: List<ImageAttachment> = emptyList(),
-               profile: String? = null): String {
+               profile: String? = null, surface: String? = null): String {
         val attachments = images.filter { it.path != null && it.mime != null }
         return call(id, "prompt.submit", profile, JSONObject().put("session_id", sessionId).put("text", text).apply {
             if (submissionId != null) put("submission_id", submissionId)
+            if (surface != null) put("surface", surface)
             if (attachments.isNotEmpty()) put("attachments", JSONArray(attachments.map { JSONObject().put("path", it.path).put("mime", it.mime) }))
         })
     }
@@ -170,6 +173,10 @@ object AssistantProtocol {
     /** The bots: this server's own profile first, then every profile it serves. */
     fun listProfiles(id: Int): String = call(id, "profiles.list", JSONObject().put("include_sessions", true))
 
+    /** `profiles.describe` 읽기 전용: SOUL.md 본문을 받아 온다(앱은 쓰지 않는다). */
+    fun describeProfile(id: Int, profile: String?, name: String): String =
+        call(id, "profiles.describe", profile, JSONObject().put("name", name))
+
     fun avatar(id: Int, profile: String): String =
         call(id, "profiles.get_asset", JSONObject().put("asset", "avatar").put("name", profile))
 
@@ -238,6 +245,7 @@ object AssistantProtocol {
             history = messages?.let(::history),
             profiles = result.optJSONArray("profiles")?.let(::profiles),
             asset = (result.opt("data") as? String)?.takeIf { result.opt("found") == true && it.startsWith("data:image/") },
+            soul = text(result, "soul"),
             result = result,
             errorMessage = if (result.opt("attached") == false) text(result, "message") ?: "사진을 올리지 못했어요" else null,
         )

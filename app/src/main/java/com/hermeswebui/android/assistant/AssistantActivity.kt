@@ -17,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import com.hermeswebui.android.MainActivity
+import com.hermeswebui.android.assistant.voice.VoiceActivity
 import com.hermeswebui.android.background.HermesKeepAliveService
 import com.hermeswebui.android.launcher.AppShortcuts
 import com.hermeswebui.android.launcher.LauncherIconManager
@@ -101,6 +102,7 @@ class AssistantActivity : ComponentActivity() {
                     loadImage = controller::loadImage,
                     saveImage = controller::saveImage,
             onSlash = controller::loadSlash,
+            onVoice = { VoiceActivity.start(this, controller.state.value.profile) },
         )
     }
 
