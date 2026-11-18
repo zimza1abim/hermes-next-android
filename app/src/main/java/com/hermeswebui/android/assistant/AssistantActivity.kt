@@ -98,6 +98,8 @@ class AssistantActivity : ComponentActivity() {
                     onTakePhoto = ::takePhoto,
                     onRemovePhoto = controller::removeImage,
                     thumbnail = controller::thumbnail,
+                    loadImage = controller::loadImage,
+                    saveImage = controller::saveImage,
             onSlash = controller::loadSlash,
         )
     }

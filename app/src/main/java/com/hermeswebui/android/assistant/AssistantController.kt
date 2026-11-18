@@ -245,6 +245,110 @@ class AssistantController private constructor(private val context: Context, priv
             ?.asImageBitmap()
     }.getOrNull()
 
+    /** Images messages name, by source; at most a few dozen large pictures are kept. */
+    private val pictures = object : android.util.LruCache<String, ImageBitmap>(96 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+    }
+    /** Callers waiting for a source that is being fetched, so one image is fetched once. */
+    private val waiting = mutableMapOf<String, MutableList<(ImageBitmap?) -> Unit>>()
+    private val fetcher = Executors.newFixedThreadPool(2) { Thread(it, "hermes-chat-images").apply { isDaemon = true } }
+
+    /**
+     * The image a message names: a `data:` URL, a web address, or a file on the Hermes machine, read with
+     * the sign-in. [done] runs on the main thread, with null when it cannot be read.
+     */
+    fun loadImage(source: String, done: (ImageBitmap?) -> Unit) {
+        pictures.get(source)?.let { return done(it) }
+        waiting[source]?.let { it += done; return }
+        waiting[source] = mutableListOf(done)
+        fetchBytes(source) { bytes ->
+            fetcher.execute {
+                val image = bytes?.let { AssistantMedia.picture(it) }
+                handler.post {
+                    image?.let { pictures.put(source, it) }
+                    waiting.remove(source)?.forEach { it(image) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Saves the image to the phone's gallery (Pictures/Hermes) at the size the server keeps it, in its own
+     * format. [done] runs on the main thread with whether it was saved.
+     */
+    fun saveImage(source: String, done: (Boolean) -> Unit) {
+        fetchBytes(source) { bytes ->
+            if (bytes == null) return@fetchBytes done(false)
+            fetcher.execute {
+                val saved = runCatching { writeToGallery(bytes) }.getOrDefault(false)
+                handler.post { done(saved) }
+            }
+        }
+    }
+
+    private fun writeToGallery(bytes: ByteArray): Boolean {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val mime = bounds.outMimeType ?: return false
+        val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"
+        val name = "hermes-${java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())}.$extension"
+        val resolver = context.contentResolver
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, mime)
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/Hermes")
+                put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+            return runCatching {
+                resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("no stream")
+                resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+                true
+            }.getOrElse {
+                resolver.delete(uri, null, null)
+                false
+            }
+        }
+        // Android 9 and older would need broad storage access, which this app does not ask for.
+        return false
+    }
+
+    /** The bytes an image source names, read on the main thread's behalf; [done] runs on the main thread. */
+    private fun fetchBytes(source: String, done: (ByteArray?) -> Unit) {
+        val finish: (ByteArray?) -> Unit = { bytes -> handler.post { done(bytes) } }
+        when {
+            source.startsWith("data:") -> finish(AssistantMedia.decodeDataUrl(source))
+            source.startsWith("http://") || source.startsWith("https://") -> fetcher.execute {
+                val direct = runCatching {
+                    (java.net.URL(source).openConnection() as java.net.HttpURLConnection).run {
+                        connectTimeout = 10_000
+                        readTimeout = 20_000
+                        try { if (responseCode == 200) inputStream.use { it.readBytes() } else null } finally { disconnect() }
+                    }
+                }.getOrNull()?.takeIf { AssistantMedia.picture(it, side = 32) != null }
+                if (direct != null) return@execute finish(direct)
+                // A phone that cannot reach the image host asks the Hermes machine that made the image.
+                handler.post {
+                    readApi("/api/media/proxy?url=" + java.net.URLEncoder.encode(source, "UTF-8")) { reply ->
+                        finish(((reply?.opt("dataUrl") ?: reply?.opt("data_url")) as? String)?.let(AssistantMedia::decodeDataUrl))
+                    } ?: finish(null)
+                }
+            }
+            else -> {
+                val path = if (source.startsWith("file://")) runCatching { java.net.URI(source).path }.getOrNull() ?: source.removePrefix("file://") else source
+                val encoded = java.net.URLEncoder.encode(path, "UTF-8")
+                val scope = _state.value.profile?.let { "&profile=" + java.net.URLEncoder.encode(it, "UTF-8") }.orEmpty()
+                readApi("/api/fs/read-data-url?path=$encoded$scope") { reply ->
+                    val bytes = (reply?.opt("dataUrl") as? String)?.let(AssistantMedia::decodeDataUrl)
+                    if (bytes != null) finish(bytes)
+                    // Older servers serve their media folders only through /api/media.
+                    else readApi("/api/media?path=$encoded") { media -> finish((media?.opt("data_url") as? String)?.let(AssistantMedia::decodeDataUrl)) } ?: finish(null)
+                } ?: finish(null)
+            }
+        }
+    }
+
     /** The recent chats of every profile, kept so the list shows at once on the next open. */
     val chats = MutableStateFlow(emptyList<ChatRow>())
     val chatsLoading = MutableStateFlow(false)

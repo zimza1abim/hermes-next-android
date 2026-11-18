@@ -164,6 +164,10 @@ internal class AssistantActions(
     val thumbnail: (String) -> ImageBitmap?,
     /** The slash menu opened: read its rows if they are not there yet. */
     val onSlash: () -> Unit = {},
+    /** Loads the images messages name; null shows them as not loadable. */
+    val loadImage: ImageLoader? = null,
+    /** Saves an image to the gallery; null offers no save button. */
+    val saveImage: ImageSaver? = null,
 )
 
 @Composable
@@ -182,7 +186,8 @@ internal fun AssistantScreen(
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
     // Text drawn without a style of its own (buttons, chips) follows the picked font too.
-    CompositionLocalProvider(LocalCalmMotion provides calm, LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = HermesFonts.family)) {
+    CompositionLocalProvider(LocalCalmMotion provides calm, LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = HermesFonts.family),
+        LocalImageLoader provides actions.loadImage, LocalImageSaver provides actions.saveImage) {
         Panel(state, draft, mode, photos, preparing, replaceable, models, actions)
     }
 }
@@ -583,8 +588,13 @@ private fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
 @Composable
 private fun HistoryItem(row: HistoryRow, named: Boolean) {
     when (row.role) {
-        HistoryRole.USER -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            Box(Modifier.widthIn(max = 320.dp)) { QuestionBubble(row.text, maxLines = 12) }
+        HistoryRole.USER -> {
+            // A photo the user sent is an `@image:` line in the stored text: it shows as a picture above the words.
+            val media = remember(row.text) { AssistantMedia.extract(row.text) }
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (media.sources.isNotEmpty()) MediaStrip(media.sources, end = true)
+                if (media.text.isNotEmpty()) Box(Modifier.widthIn(max = 320.dp)) { QuestionBubble(media.text, maxLines = 12) }
+            }
         }
         HistoryRole.ASSISTANT -> Column {
             if (named) BotName()
@@ -596,7 +606,9 @@ private fun HistoryItem(row: HistoryRow, named: Boolean) {
 /** The answer block by block: while it streams only the last block changes, so only it is laid out again. */
 @Composable
 internal fun Answer(shown: String, writing: Boolean) {
-    val blocks = remember(shown) { AssistantMarkdown.parse(shown) }
+    // Images the answer names are drawn as pictures under its text, not as their Markdown or file path.
+    val media = remember(shown) { AssistantMedia.extract(shown) }
+    val blocks = remember(media.text) { AssistantMarkdown.parse(media.text) }
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
             blocks.forEachIndexed { index, block ->
@@ -616,6 +628,7 @@ internal fun Answer(shown: String, writing: Boolean) {
             }
         }
     }
+    if (media.sources.isNotEmpty()) MediaStrip(media.sources, modifier = Modifier.padding(top = if (blocks.isEmpty()) 0.dp else 10.dp))
 }
 
 @Composable

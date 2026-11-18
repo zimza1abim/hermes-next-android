@@ -140,7 +140,7 @@ internal fun ChatScreen(
     val botName = botRow?.title ?: state.profile
     val bot = botName?.let { Bot(it, view.avatars[view.avatarKey(botRow?.name ?: state.profile.orEmpty())]) }
     CompositionLocalProvider(
-        LocalCalmMotion provides calm, LocalBot provides bot,
+        LocalCalmMotion provides calm, LocalBot provides bot, LocalImageLoader provides actions.loadImage, LocalImageSaver provides actions.saveImage,
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = HermesFonts.family),
     ) {
         BackHandler {
