@@ -311,7 +311,7 @@ class WebappGatewayCoordinator private constructor(
 
     private fun execute(effect: WebappEffect) {
         when (effect) {
-            is WebappEffect.Post -> notify(effect.alert, effect.update)
+            is WebappEffect.Post -> post(effect.alert, effect.update)
             is WebappEffect.Cancel -> {
                 val id = effect.kind.notificationId(effect.key)
                 NotificationManagerCompat.from(context).cancel(GatewayAlertKind.ALERT_TAG, id)
@@ -501,19 +501,59 @@ class WebappGatewayCoordinator private constructor(
     }
 
     @SuppressLint("MissingPermission")
-    private fun notify(alert: Alert, update: Boolean) {
+    /** A chat's origin never changes, so each stored id is looked up once. */
+    private val origins = object : LinkedHashMap<String, AlertOrigin?>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, AlertOrigin?>) = size > MAX_ORIGINS
+    }
+    /** Alerts held while their chat's origin is being read, by stored id. */
+    private val originReads = mutableMapOf<String, MutableList<Alert>>()
+
+    /**
+     * Posts [alert], a finished or failed task on its chat's origin channel (Telegram, OpenBot) when it
+     * has one. An unknown origin is read from the server first; a failed read posts on the kind's channel.
+     */
+    private fun post(alert: Alert, update: Boolean) {
+        if (update || alert.kind.isPrompt) return notify(alert, update)
+        val stored = state.sessions[alert.sessionId]?.storedId ?: alert.sessionId
+        if (origins.containsKey(stored)) return notify(alert, false, origins[stored])
+        originReads[stored]?.let { it += alert; return }
+        val url = serverUrl()
+        val endpoint = url?.let(MonitorEndpoint::from) ?: return notify(alert, false)
+        originReads[stored] = mutableListOf(alert)
+        SignInGate.getJson(endpoint, "/api/sessions/" + Uri.encode(stored), url) { row ->
+            handler.post {
+                val origin = row?.let {
+                    AlertOrigin.of(it.optString("source").ifBlank { null }, it.optString("created_source").ifBlank { null })
+                }
+                if (row != null) origins[stored] = origin
+                originReads.remove(stored).orEmpty().forEach { held -> if (!state.visible) notify(held, false, origin) }
+                if (!dispatching && trayChanges.isNotEmpty()) {
+                    refreshGroups(trayChanges.toMap())
+                    trayChanges.clear()
+                }
+            }
+        }
+    }
+
+    private fun notify(alert: Alert, update: Boolean, origin: AlertOrigin? = null) {
+        val channel = origin?.channelId ?: alert.kind.channelId
+        // A channel the user turned off posts nothing, so it must not count as shown for the summaries either.
+        if (origin != null && runCatching {
+                context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(channel)?.importance
+            }.getOrNull() == NotificationManager.IMPORTANCE_NONE
+        ) return
         if (!HermesKeepAliveService.canPostNotifications(context)) return
         val id = alert.kind.notificationId(alert.key)
         if (update && !isShown(id)) return
         val title = alert.title ?: context.getString(R.string.app_name)
         val reason = context.getString(alert.reason.labelRes)
         val subText = alert.note?.let { "$reason · ${context.getString(it.labelRes)}" } ?: reason
-        val publicVersion = NotificationCompat.Builder(context, alert.kind.channelId)
+        val publicVersion = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(reason)
             .build()
-        val builder = NotificationCompat.Builder(context, alert.kind.channelId)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.brand_sky))
             .setLargeIcon(largeIcon)
@@ -566,7 +606,7 @@ class WebappGatewayCoordinator private constructor(
         }.isSuccess
         if (posted) {
             trayChanges[id] = ShownAlert(
-                id, AlertGroups.key(alert.sessionId), title, digest(subText, alert.body), alert.kind.channelId,
+                id, AlertGroups.key(alert.sessionId), title, digest(subText, alert.body), channel,
                 System.currentTimeMillis(),
             )
         }
@@ -715,6 +755,7 @@ class WebappGatewayCoordinator private constructor(
         }
 
         const val STOPPED_WARNING_ID = 20_024
+        private const val MAX_ORIGINS = 200
         /** A chat handed over by the assistant: up to 60 tries, half a second apart until the page is there. */
         private const val OPEN_ATTEMPTS = 60
         private const val OPEN_RETRY_MS = 500L
@@ -770,7 +811,7 @@ class WebappGatewayCoordinator private constructor(
                 AlertReason.BACKGROUND -> R.string.webapp_alert_background
             }
 
-        /** One channel per [GatewayAlertKind] plus the keep-alive channel, grouped as "Hermes Agent". */
+        /** One channel per [GatewayAlertKind] and per [AlertOrigin], plus the keep-alive channel, grouped as "Hermes Agent". */
         fun createChannels(context: Context) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
             manager.createNotificationChannelGroup(
@@ -786,6 +827,14 @@ class WebappGatewayCoordinator private constructor(
                 manager.createNotificationChannel(
                     NotificationChannel(kind.channelId, kind.label, kind.importance).apply {
                         description = kind.summary
+                        group = HermesKeepAliveService.CHANNEL_GROUP_ID
+                    }
+                )
+            }
+            AlertOrigin.entries.forEach { origin ->
+                manager.createNotificationChannel(
+                    NotificationChannel(origin.channelId, origin.label, origin.importance).apply {
+                        description = origin.summary
                         group = HermesKeepAliveService.CHANNEL_GROUP_ID
                     }
                 )

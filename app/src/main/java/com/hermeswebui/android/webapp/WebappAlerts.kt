@@ -47,6 +47,37 @@ enum class GatewayAlertKind(
     }
 }
 
+/**
+ * Where a chat reaches the user besides this app. Its finished and failed tasks are posted on the
+ * origin's own notification channel, so the user turns them on or off in Android's settings.
+ */
+enum class AlertOrigin(val channelId: String, val label: String, val summary: String, val importance: Int) {
+    /** Telegram already rings for these replies, so the channel starts off. */
+    TELEGRAM(
+        "hermes_webapp_origin_telegram", "Telegram chats",
+        "Finished or failed tasks of chats that answer on Telegram, which already notifies you",
+        NotificationManager.IMPORTANCE_NONE,
+    ),
+    /** OpenBot does not notify from the background, so the channel starts on. */
+    OPENBOT(
+        "hermes_webapp_origin_openbot", "OpenBot chats",
+        "Finished or failed tasks of chats started in OpenBot or another ACP client",
+        NotificationManager.IMPORTANCE_DEFAULT,
+    );
+
+    companion object {
+        /** Sources whose replies go out through Telegram. */
+        private val TELEGRAM_SOURCES = setOf("telegram", "webhook")
+
+        /** The origin of a session row from `/api/sessions/{id}`; null for a chat of this app or the Webapp. */
+        fun of(source: String?, createdSource: String?): AlertOrigin? = when {
+            source in TELEGRAM_SOURCES -> TELEGRAM
+            createdSource == "acp" || source == "acp" -> OPENBOT
+            else -> null
+        }
+    }
+}
+
 /** The single settings value for the Webapp background feature. Absent storage reads as these defaults. */
 data class WebappBackgroundSettings(
     val keepAlive: Boolean = true,
